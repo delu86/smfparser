@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smfparser"
+version = "0.1.0"
+description = "Parser for IBM z/OS SMF binary dumps with CSV/Excel/JSON/SQL output"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.1",
+    "pyyaml>=6",
+    "sqlalchemy>=2.0",
+    "pymysql>=1.1",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+smfparser = "smfparser.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

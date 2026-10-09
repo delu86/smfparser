@@ -1,0 +1,46 @@
+# smfparser configuration. Relative paths are resolved against this file's directory.
+# ${VAR} in any value is replaced with the environment variable VAR.
+
+input:
+  files:
+    - "smf_files/*"        # glob patterns
+  codepage: cp037           # EBCDIC code page for text fields (cp037, cp500, cp1140, ...)
+
+filter:
+  # type -> list of subtypes to keep ([] = all subtypes). Omit `include` to keep every
+  # record type that has a parser.
+  include:
+    30: [1, 2, 3, 4, 5, 6]
+  # type -> subtypes to drop ([] = all subtypes), applied after `include`.
+  exclude: {}
+
+records:
+  30:
+    excp: false             # true adds table smf30_excp (one row per DD from the EXCP section)
+
+output:
+  chunk_rows: 50000         # rows buffered per table before writing
+  targets:
+    - type: csv
+      dir: out/csv
+    - type: json
+      dir: out/json
+      lines: true           # JSON Lines (.jsonl); false writes one JSON array per table
+    - type: excel
+      path: out/smf.xlsx    # one sheet per table
+    - type: sqlite
+      path: out/smf.db
+      if_exists: replace    # append | replace | fail
+    # - type: mariadb
+    #   host: localhost
+    #   port: 3306
+    #   database: smf
+    #   user: smf
+    #   password: ${SMF_DB_PASSWORD}
+    #   if_exists: append
+    #   table_prefix: ""
+    # - type: sql           # any SQLAlchemy URL (driver must be installed)
+    #   url: postgresql+psycopg://user:pw@host/db
+
+logging:
+  level: INFO
