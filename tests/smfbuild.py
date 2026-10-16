@@ -58,6 +58,7 @@ def type30_record(
     excp: list[tuple[str, int]] | None = None,  # (ddname, blocks)
     ident_length: int = 250,
     d: date = date(2026, 10, 9),
+    continuation: bool = False,  # only subsystem, identification and EXCP sections, as in an overflow record
 ) -> bytes:
     """A type 30 record (with RDW) holding subsystem, identification, completion, processor,
     performance, accounting and EXCP sections."""
@@ -119,6 +120,8 @@ def type30_record(
         (b"", 0, 0),  # operator
         (excp_bytes, 30, len(excp)),
     ):
+        if continuation and data not in (subsystem, ident, excp_bytes):
+            data, count = b"", 0
         sections.append((data, entry_len, count))
     triplets = b""
     payload = b""

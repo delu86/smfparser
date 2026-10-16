@@ -67,6 +67,18 @@ def test_excp_child_rows_only_when_enabled():
     assert list(excp[0]) == list(Type30Parser(ParserOptions({"excp": True})).schemas()["smf30_excp"])
 
 
+def test_continuation_flag():
+    [(_, first)] = parse(type30_record(subtype=4))
+    assert first["continuation"] is False
+    out = parse(type30_record(subtype=4, continuation=True, excp=[("DD1", 1)]), excp=True)
+    (_, cont), (_, dd) = out
+    assert cont["continuation"] is True and cont["smf30cpt"] is None and cont["smf30jbn"] == "MYJOB"
+    assert dd["continuation"] is True and dd["smf30ddn"] == "DD1"
+    # Job start records never have a processor section; they are not continuations.
+    [(_, start)] = parse(type30_record(subtype=1, continuation=True))
+    assert start["continuation"] is False
+
+
 def test_unknown_subtype_raises():
     with pytest.raises(ValueError, match="subtype 9"):
         parse(type30_record(subtype=9))

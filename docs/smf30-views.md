@@ -160,9 +160,12 @@ ORDER BY stepnumber;
 - **Continuation records are filtered out:** an SMF record holds at most about 32 KB. When a step
   has more DDs than fit in one record (about 1,000), z/OS writes the rest in continuation records.
   These carry only the subsystem, identification and EXCP sections: no CPU, no interval start,
-  no service data. The tables keep them (with `excp: true` they hold the remaining DDs), but every
-  view adds `WHERE smf30cpt IS NOT NULL` so each step, job or interval appears once. In the sample
-  dump, this removes 14 step, 47 job and 17 interval rows.
+  no service data. The parser marks them with `continuation = true` in every output (see the
+  [field reference](smf30-fields.md#common-header-columns)). The tables keep them (with
+  `excp: true` they hold the remaining DDs), but every view adds `WHERE NOT continuation` so each
+  step, job or interval appears once. In the sample dump, this removes 14 step, 47 job and
+  17 interval rows. To look at them, query the tables, e.g.
+  `SELECT * FROM smf30_4 WHERE continuation`.
 - **Duplicates:** if you load the same dump twice with `if_exists: append`, its rows appear twice in
   the views too. Use `if_exists: replace`, or deduplicate on `source_file` and `record_offset` in
   the source tables.

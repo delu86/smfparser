@@ -31,6 +31,7 @@ output:
     - type: sqlite
       path: out/smf.db
       if_exists: replace    # append | replace | fail
+      views: true           # (re)create the steps/jobs/intervals views (docs/smf30-views.md)
     # - type: mariadb
     #   host: localhost
     #   port: 3306

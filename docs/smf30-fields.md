@@ -47,6 +47,14 @@ z/OS 2.5 records (record version `05`).
 
 The accounting section, which is variable length, becomes one column, `smf30act`: the JOB/EXEC accounting fields joined with commas, as in JCL.
 
+The last column, `continuation` (boolean), is derived by smfparser rather than taken from a field.
+When a record's repeating sections (usually EXCP, one entry per DD) don't fit in the 32 KB maximum
+record size, z/OS writes the overflow in extra records. These *continuation records* carry only the
+subsystem, identification and overflow sections, so their CPU, I/O and performance columns are empty.
+smfparser sets `continuation` to true for records of subtypes 2–6 that have no processor
+accounting section. It is always false in `smf30_1`, because job start records never have that
+section. The `steps`, `jobs` and `intervals` views leave continuation records out.
+
 ## Subsystem section (SMF30SOF)
 
 | Column | Offset | Len | Type | Description |
@@ -296,7 +304,7 @@ The accounting section, which is variable length, becomes one column, `smf30act`
 ## EXCP section (SMF30EOF): table `smf30_excp`
 
 One row per DD entry. Each row also carries `source_file`, `record_offset`, `smf_datetime`, `smf_subtype`,
-`smf30jbn`, `smf30jnm`, `smf30stm`, `smf30stn`, `smf30pgm` from the parent record, and `excp_index`
+`smf30jbn`, `smf30jnm`, `smf30stm`, `smf30stn`, `smf30pgm`, `continuation` from the parent record, and `excp_index`
 (the entry's position within the record). `source_file` + `record_offset` join back to the subtype table.
 
 | Column | Offset | Len | Type | Description |

@@ -25,4 +25,4 @@ def test_type30_views():
     sql = render(VIEWS[2], "mysql")
     assert "TIMESTAMPDIFF(MICROSECOND, smf30ist, smf_datetime)" in sql
     # Continuation records (no processor section) are filtered out of both UNION branches.
-    assert sql.count("WHERE smf30cpt IS NOT NULL") == 2
+    assert sql.count("WHERE NOT continuation") == 2

@@ -139,8 +139,8 @@ At the end of a successful run, the pipeline calls `Writer.finish(schemas, views
 The type 30 views live in `records/type30.py`:
 - `_view_columns()` holds the shared columns;
 - `CP_CPU_SQL`, `ZIIP_CPU_SQL` and `POTENTIAL_CP_CPU_SQL` hold the CPU formulas;
-- `VIEWS` lists the views. All three use `HAS_PROCESSOR_SQL` as their `where` filter, to drop EXCP
-  continuation records.
+- `VIEWS` lists the views. All three use `NOT_CONTINUATION_SQL` as their `where` filter, to drop the
+  continuation records that `is_continuation()` flags in the `continuation` column.
 
 To add a column, add a pair to `_view_columns()`, keeping the SQL portable. Then update the column
 table in [smf30-views.md](smf30-views.md) and the column list asserted in

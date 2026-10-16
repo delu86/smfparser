@@ -14,7 +14,9 @@ Supported record types: **30** (common address space work: job, step and interva
 - Decodes EBCDIC, packed-decimal dates, TOD clocks and CPU-time units into proper text,
   datetimes and seconds.
 - Writes one flat table per subtype, with IBM field names as columns, plus an optional per-DD
-  EXCP table.
+  EXCP table. Overflow (continuation) records are flagged in a `continuation` column.
+- In databases, creates the `steps`, `jobs` and `intervals` views. They show elapsed time and CP,
+  zIIP and normalised CPU totals per step, job and interval.
 - Uses a YAML config for filters, code page, output targets and database credentials (taken from
   environment variables).
 - Streams the input and writes in chunks, so large dumps don't need to fit in memory.
@@ -49,6 +51,7 @@ output:
 - [User guide](docs/user-guide.md): commands, every config option, output tables, example queries
 - [SMF input format](docs/smf-input-format.md): getting SMF data off z/OS and how records are laid out
 - [SMF type 30 field reference](docs/smf30-fields.md): every output column with offset, units and meaning
+- [SMF type 30 views](docs/smf30-views.md): the `steps`, `jobs` and `intervals` views, and their CPU formulas
 - [Developer guide](docs/developer-guide.md): architecture, adding record types or output formats, tests
 
 ## Development

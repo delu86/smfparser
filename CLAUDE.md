@@ -32,7 +32,8 @@ developer guide). After changing `records/type30.py`, regenerate the field refer
 - `registry.py` — `RecordParser` base class + `@register`; `supported_types()` imports `records/*` modules.
 - `records/header.py` — standard SMF header columns shared by every table.
 - `records/type30.py` — SMF30 section definitions (column names = IBM field names, lower case). One flat table per
-  subtype (`smf30_1`..`smf30_6`); repeating EXCP section optionally goes to `smf30_excp` (`records: {30: {excp: true}}`).
+  subtype (`smf30_1`..`smf30_6`), plus a derived
+  `continuation` flag (overflow records with no processor section; excluded from the views); repeating EXCP section optionally goes to `smf30_excp` (`records: {30: {excp: true}}`).
 - `pipeline.py` — read → filter → parse → per-table buffers → DataFrames with fixed schema/dtypes every
   `chunk_rows` → all writers. A record that fails to parse is counted and logged, not fatal.
 - `writers/` — `files.py` (csv, json/jsonl, excel), `sql.py` (SQLAlchemy `to_sql`; batches capped by the

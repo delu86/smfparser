@@ -193,7 +193,9 @@ No indexes are created. Add your own, for example on `(smf30jbn, smf30jnm)` or `
 | `steps`, `jobs`, `intervals` | Views (database outputs only) with readable names, elapsed time and CPU totals. See [SMF type 30 views](smf30-views.md). |
 
 Every row starts with the common columns `source_file`, `record_offset`, `smf_datetime`,
-`smf_type`, `smf_subtype`, `smf_sid`, `smf_ssi` and `smf_flag`. The record's own fields follow.
+`smf_type`, `smf_subtype`, `smf_sid`, `smf_ssi` and `smf_flag`. The record's own fields follow. Type 30
+tables end with `continuation`, which is true for the overflow records z/OS writes when a step has
+too many DDs for one record.
 They are listed with their meaning and units in the [SMF type 30 field reference](smf30-fields.md).
 
 Value conventions:

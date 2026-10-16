@@ -301,6 +301,14 @@ o.append("| Column | Type | Description |\n|---|---|---|")
 for c,dt in HEADER_SCHEMA.items():
     o.append(f"| `{c}` | {dt} | {DESC[c]} |")
 o.append("\nThe accounting section, which is variable length, becomes one column, `smf30act`: the JOB/EXEC accounting fields joined with commas, as in JCL.\n")
+o.append("""The last column, `continuation` (boolean), is derived by smfparser rather than taken from a field.
+When a record's repeating sections (usually EXCP, one entry per DD) don't fit in the 32 KB maximum
+record size, z/OS writes the overflow in extra records. These *continuation records* carry only the
+subsystem, identification and overflow sections, so their CPU, I/O and performance columns are empty.
+smfparser sets `continuation` to true for records of subtypes 2–6 that have no processor
+accounting section. It is always false in `smf30_1`, because job start records never have that
+section. The `steps`, `jobs` and `intervals` views leave continuation records out.
+""")
 for at,s in t.FLAT_SECTIONS:
     o.append(f"## {s.name.capitalize()} section ({TRIP[at]})\n")
     o.append(table(s.fields)+"\n")

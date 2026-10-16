@@ -291,9 +291,17 @@ FLAT_SECTIONS: tuple[tuple[int, Section], ...] = (
 )
 
 ACCOUNTING_SCHEMA = {"smf30act": "string"}
+CONTINUATION_SCHEMA = {"continuation": "boolean"}
 
 # Identification columns copied into each EXCP row to make it usable on its own.
-EXCP_KEY_COLUMNS = ("smf30jbn", "smf30jnm", "smf30stm", "smf30stn", "smf30pgm")
+EXCP_KEY_COLUMNS = ("smf30jbn", "smf30jnm", "smf30stm", "smf30stn", "smf30pgm", "continuation")
+
+
+def is_continuation(rec: bytes, subtype: int) -> bool:
+    """True for the extra records z/OS writes when a record's repeating sections (e.g. EXCP) overflow
+    32 KB: they carry only the subsystem, identification and overflow sections. Subtype 1 never
+    has a processor section, so it can't be told apart this way and is never flagged."""
+    return subtype != 1 and triplet(rec, TRIPLET_PROCESSOR).count == 0
 
 
 def decode_accounting(rec: bytes, codepage: str) -> str | None:
@@ -348,13 +356,13 @@ def _view_columns(start: str, *extra: tuple[str, Expr]) -> tuple[tuple[str, Expr
 
 # A step with too many DDs for one record is written as several records; the continuation records
 # carry only the subsystem, identification and EXCP sections. The views keep the first record only.
-HAS_PROCESSOR_SQL = "smf30cpt IS NOT NULL"
+NOT_CONTINUATION_SQL = "NOT continuation"
 
 VIEWS = (
-    View("steps", ("smf30_4",), _view_columns("smf30sit"), HAS_PROCESSOR_SQL),
-    View("jobs", ("smf30_5",), _view_columns("smf30sit"), HAS_PROCESSOR_SQL),
+    View("steps", ("smf30_4",), _view_columns("smf30sit"), NOT_CONTINUATION_SQL),
+    View("jobs", ("smf30_5",), _view_columns("smf30sit"), NOT_CONTINUATION_SQL),
     View("intervals", ("smf30_2", "smf30_3"), _view_columns("smf30ist", ("subtype", "smf_subtype")),
-         HAS_PROCESSOR_SQL),
+         NOT_CONTINUATION_SQL),
 )
 
 
@@ -373,6 +381,7 @@ class Type30Parser(RecordParser):
         for _, section in FLAT_SECTIONS:
             schema.update(section.schema())
         schema.update(ACCOUNTING_SCHEMA)
+        schema.update(CONTINUATION_SCHEMA)
         return schema
 
     def schemas(self) -> dict[str, dict[str, str]]:
@@ -396,6 +405,7 @@ class Type30Parser(RecordParser):
             start = next(occurrences(rec, t), None)
             row.update(section.empty() if start is None else section.decode(rec, start, t.length, ctx.codepage))
         row["smf30act"] = decode_accounting(rec, ctx.codepage)
+        row["continuation"] = is_continuation(rec, subtype)
         yield self.table_name(subtype), row
 
         if self.options.get("excp", False):
