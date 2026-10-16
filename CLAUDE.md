@@ -51,6 +51,7 @@ Create `records/typeNN.py` with `Section` definitions and a `@register`ed `Recor
 
 ## Layout caveats
 
-SMF30 offsets follow the z/OS 2.x mapping and were checked against the sample data. The zAAP/zIIP time family
-is in hundredths of a second (converted to seconds). `SMF30CEPI`, `SMF30CRP` and `SMF30ICU/ISB_STEP_TERM/INIT`
-are stored as raw binary values: their units are not yet confirmed.
+SMF30 offsets follow the z/OS 2.x mapping and were checked against the sample data. All time fields are
+converted to seconds. Most are in hundredths of a second. The promoted times (`SMF30CEP/CEPI/CRP`) and the
+queue/residency times (`SMF30TAT/RES/ETA/JQT/RQT/HQT/SQT`) are in 1.024 ms units (`sec1024us`). Units come from
+pacsys and the IBM SMF Explorer descriptions; the IBM SMF Explorer offsets are wrong, so don't use them.

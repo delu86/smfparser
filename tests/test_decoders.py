@@ -41,3 +41,4 @@ def test_stck():
 def test_units():
     assert d.hundredths(b"\x00\x00\x00\x97") == 1.51
     assert d.units_128us(b"\x00\x00\x00\x07") == pytest.approx(0.000896)
+    assert d.units_1024us(b"\x00\x00\x19\xc3") == 6.75328  # 6595 units, no float noise

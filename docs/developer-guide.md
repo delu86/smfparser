@@ -70,6 +70,7 @@ Key design points:
 | `tod` | STCK → `datetime` | `datetime64[us]` |
 | `sec100` | hundredths → seconds | `Float64` |
 | `sec128us` | 128 µs units → seconds | `Float64` |
+| `sec1024us` | 1.024 ms units → seconds | `Float64` |
 
 Times are combined with their dates after all of a section's fields are decoded, so the `date`
 field can sit anywhere in the section. A `not_before` reference to another `time` field only
@@ -181,10 +182,11 @@ The script fails if a field has no description, so a new field can't be left und
 
 ## Known gaps
 
-- `SMF30CEPI`, `SMF30CRP` and the `SMF30ICU/ISB_STEP_TERM/INIT` fields are written as raw integers
-  until their units are confirmed. The zAAP/zIIP time family is converted from hundredths of a second
-  (per the Pacific Systems Group layout, consistent with the sample data). Performance
-  queue and residency times (`SMF30TAT`, `SMF30RES`, `SMF30JQT`, …) are also raw (1.024 ms units).
+- All SMF30 time fields are converted to seconds. Their units were taken from the Pacific Systems
+  Group layout and the IBM SMF Explorer descriptions, and checked against the sample data:
+  - hundredths of a second: CPU times, the zAAP/zIIP family, `SMF30ICU/ISB_STEP_TERM/INIT`;
+  - 1.024 ms units: the promoted times `SMF30CEP`/`CEPI`/`CRP`, and the queue and residency times
+    `SMF30TAT`, `RES`, `ETA`, `JQT`, `RQT`, `HQT`, `SQT`.
 - Type 30 sections not decoded yet: APPC/MVS resource, z/OS UNIX (OpenMVS) process, usage data
   (product/IFAUSAGE), counter data, zEDC and crypto sections.
 - Flag fields (`SMF30STI`, `SMF30TFL`, …) are written as integers, not broken into bits.

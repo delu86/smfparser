@@ -104,9 +104,8 @@ COMPLETION = Section("completion", (
     F("SMF30ARC", 4, 4),
 ))
 
-# CPU times, including the zAAP/zIIP family, are in hundredths of a second, converted to seconds.
-# SMF30CEPI, SMF30CRP and the initiator step-term/init fields are kept as raw binary values until
-# their units are confirmed.
+# CPU times are in hundredths of a second, except the promoted times SMF30CEP, SMF30CEPI and
+# SMF30CRP (1.024 ms units); all are converted to seconds.
 PROCESSOR = Section("processor", (
     F("SMF30PTY", 0, 2),
     F("SMF30TFL", 2, 2),
@@ -129,7 +128,7 @@ PROCESSOR = Section("processor", (
     F("SMF30ASR", 68, 4, "sec100"),
     F("SMF30ENC", 72, 4, "sec100"),
     F("SMF30DET", 76, 4, "sec100"),
-    F("SMF30CEP", 80, 4, "sec100"),
+    F("SMF30CEP", 80, 4, "sec1024us"),
     F("SMF30TF2", 84, 1),
     F("SMF30T32", 85, 1),
     F("SMF30T33", 86, 1),
@@ -139,7 +138,7 @@ PROCESSOR = Section("processor", (
     F("SMF30_TIME_IFA_ON_CP", 100, 4, "sec100"),
     F("SMF30_ENCLAVE_TIME_IFA_ON_CP", 104, 4, "sec100"),
     F("SMF30_DEP_ENCLAVE_TIME_IFA_ON_CP", 108, 4, "sec100"),
-    F("SMF30CEPI", 112, 4),
+    F("SMF30CEPI", 112, 4, "sec1024us"),
     F("SMF30_TIME_ON_ZIIP", 116, 4, "sec100"),
     F("SMF30_ENCLAVE_TIME_ON_ZIIP", 120, 4, "sec100"),
     F("SMF30_DEPENC_TIME_ON_ZIIP", 124, 4, "sec100"),
@@ -148,11 +147,11 @@ PROCESSOR = Section("processor", (
     F("SMF30_DEPENC_TIME_ZIIP_ON_CP", 136, 4, "sec100"),
     F("SMF30_ENCLAVE_TIME_ZIIP_QUAL", 140, 4, "sec100"),
     F("SMF30_DEPENC_TIME_ZIIP_QUAL", 144, 4, "sec100"),
-    F("SMF30CRP", 148, 4),
-    F("SMF30ICU_STEP_TERM", 152, 4),
-    F("SMF30ICU_STEP_INIT", 156, 4),
-    F("SMF30ISB_STEP_TERM", 160, 4),
-    F("SMF30ISB_STEP_INIT", 164, 4),
+    F("SMF30CRP", 148, 4, "sec1024us"),
+    F("SMF30ICU_STEP_TERM", 152, 4, "sec100"),
+    F("SMF30ICU_STEP_INIT", 156, 4, "sec100"),
+    F("SMF30ISB_STEP_TERM", 160, 4, "sec100"),
+    F("SMF30ISB_STEP_INIT", 164, 4, "sec100"),
     F("SMF30_MISSED_SMF30BLK", 168, 4),
     F("SMF30_MISSED_SMF30DCT", 172, 4),
     F("SMF30_HIGHEST_TASK_CPU_PERCENT", 176, 2),
@@ -209,27 +208,28 @@ STORAGE = Section("storage", (
     F("SMF30HSH", 224, 8),
 ))
 
+# Transaction active/residency and queue times are in 1.024 ms units, converted to seconds.
 PERFORMANCE = Section("performance", (
     F("SMF30SRV", 0, 4),
     F("SMF30CSU", 4, 4),
     F("SMF30SRB", 8, 4),
     F("SMF30IO", 12, 4),
     F("SMF30MSO", 16, 4),
-    F("SMF30TAT", 20, 4),
+    F("SMF30TAT", 20, 4, "sec1024us"),
     F("SMF30SUS", 24, 4),
-    F("SMF30RES", 28, 4),
+    F("SMF30RES", 28, 4, "sec1024us"),
     F("SMF30TRS", 32, 4),
     F("SMF30WLM", 36, 8, "char"),
     F("SMF30SCN", 44, 8, "char"),
     F("SMF30GRN", 52, 8, "char"),
     F("SMF30RCN", 60, 8, "char"),
-    F("SMF30ETA", 68, 4),
+    F("SMF30ETA", 68, 4, "sec1024us"),
     F("SMF30ESU", 72, 4),
     F("SMF30ETC", 76, 4),
-    F("SMF30JQT", 96, 4),
-    F("SMF30RQT", 100, 4),
-    F("SMF30HQT", 104, 4),
-    F("SMF30SQT", 108, 4),
+    F("SMF30JQT", 96, 4, "sec1024us"),
+    F("SMF30RQT", 100, 4, "sec1024us"),
+    F("SMF30HQT", 104, 4, "sec1024us"),
+    F("SMF30SQT", 108, 4, "sec1024us"),
     F("SMF30PF1", 112, 1),
     F("SMF30PF2", 113, 1),
     F("SMF30INV", 114, 1),

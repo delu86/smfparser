@@ -67,6 +67,11 @@ def units_128us(b: bytes) -> float:
     return uint(b) * 128e-6
 
 
+def units_1024us(b: bytes) -> float:
+    """Binary count of 1.024-millisecond units, as seconds."""
+    return uint(b) * 1024 / 1_000_000
+
+
 def time_of_day(b: bytes) -> timedelta:
     """Hundredths of a second since midnight, as an offset from midnight."""
     return timedelta(milliseconds=uint(b) * 10)

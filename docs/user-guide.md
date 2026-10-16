@@ -200,7 +200,7 @@ They are listed with their meaning and units in the [SMF type 30 field reference
 
 Value conventions:
 - Text is decoded from EBCDIC, with trailing blanks removed.
-- CPU times and I/O connect times are in seconds.
+- CPU, I/O connect, queue and residency times are in seconds.
 - A time of day and its date are combined into one datetime.
 - Missing sections or fields are empty (NULL).
 

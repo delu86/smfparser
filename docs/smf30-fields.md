@@ -26,11 +26,9 @@ z/OS 2.5 records (record version `05`).
 
 **Conventions**
 - Text is decoded from EBCDIC (code page `input.codepage`, default `cp037`), with trailing blanks and binary zeros removed.
-- CPU times and connect times are converted to **seconds**.
+- CPU, connect, queue and residency times are converted to **seconds**, whatever unit they are stored in.
 - A time of day is combined with its date into a single datetime. `smf30ast` and `smf30pps` have no date of their
   own and use `smf30std`; if the result is earlier than `smf30sit`, it is moved to the next day (midnight rollover).
-- Fields marked *raw* are written as unconverted binary integers until their units are checked
-  against the IBM documentation. The same applies to queue and residency times documented in 1.024 ms units.
 
 ## Common header columns
 
@@ -158,7 +156,7 @@ section. The `steps`, `jobs` and `intervals` views leave continuation records ou
 | `smf30asr` | 68 | 4 | seconds (stored in hundredths) | Additional SRB CPU time (preemptable and client SRBs) |
 | `smf30enc` | 72 | 4 | seconds (stored in hundredths) | Independent enclave CPU time |
 | `smf30det` | 76 | 4 | seconds (stored in hundredths) | Dependent enclave CPU time |
-| `smf30cep` | 80 | 4 | seconds (stored in hundredths) | CPU time while enqueue-promoted |
+| `smf30cep` | 80 | 4 | seconds (stored in 1.024 ms units) | CPU time while enqueue-promoted |
 | `smf30tf2` | 84 | 1 | integer | Additional timer flags |
 | `smf30t32` | 85 | 1 | integer | Failure flags |
 | `smf30t33` | 86 | 1 | integer | Failure flags 2 |
@@ -168,7 +166,7 @@ section. The `steps`, `jobs` and `intervals` views leave continuation records ou
 | `smf30_time_ifa_on_cp` | 100 | 4 | seconds (stored in hundredths) | zAAP-eligible time that ran on a standard CP |
 | `smf30_enclave_time_ifa_on_cp` | 104 | 4 | seconds (stored in hundredths) | Independent enclave zAAP-eligible time on a CP |
 | `smf30_dep_enclave_time_ifa_on_cp` | 108 | 4 | seconds (stored in hundredths) | Dependent enclave zAAP-eligible time on a CP |
-| `smf30cepi` | 112 | 4 | integer, raw (units not yet confirmed) | Enqueue-promoted CPU time for the interval |
+| `smf30cepi` | 112 | 4 | seconds (stored in 1.024 ms units) | Enqueue-promoted CPU time for the interval |
 | `smf30_time_on_ziip` | 116 | 4 | seconds (stored in hundredths) | Time on zIIP |
 | `smf30_enclave_time_on_ziip` | 120 | 4 | seconds (stored in hundredths) | Independent enclave time on zIIP |
 | `smf30_depenc_time_on_ziip` | 124 | 4 | seconds (stored in hundredths) | Dependent enclave time on zIIP |
@@ -177,11 +175,11 @@ section. The `steps`, `jobs` and `intervals` views leave continuation records ou
 | `smf30_depenc_time_ziip_on_cp` | 136 | 4 | seconds (stored in hundredths) | Dependent enclave zIIP-eligible time on a CP |
 | `smf30_enclave_time_ziip_qual` | 140 | 4 | seconds (stored in hundredths) | Independent enclave time qualified to run on a zIIP |
 | `smf30_depenc_time_ziip_qual` | 144 | 4 | seconds (stored in hundredths) | Dependent enclave time qualified to run on a zIIP |
-| `smf30crp` | 148 | 4 | integer, raw (units not yet confirmed) | CPU time while promoted for chronic resource contention |
-| `smf30icu_step_term` | 152 | 4 | integer, raw (units not yet confirmed) | Initiator TCB CPU time, step termination part |
-| `smf30icu_step_init` | 156 | 4 | integer, raw (units not yet confirmed) | Initiator TCB CPU time, step initialisation part |
-| `smf30isb_step_term` | 160 | 4 | integer, raw (units not yet confirmed) | Initiator SRB CPU time, step termination part |
-| `smf30isb_step_init` | 164 | 4 | integer, raw (units not yet confirmed) | Initiator SRB CPU time, step initialisation part |
+| `smf30crp` | 148 | 4 | seconds (stored in 1.024 ms units) | CPU time while promoted for chronic resource contention |
+| `smf30icu_step_term` | 152 | 4 | seconds (stored in hundredths) | Initiator TCB CPU time, step termination part |
+| `smf30icu_step_init` | 156 | 4 | seconds (stored in hundredths) | Initiator TCB CPU time, step initialisation part |
+| `smf30isb_step_term` | 160 | 4 | seconds (stored in hundredths) | Initiator SRB CPU time, step termination part |
+| `smf30isb_step_init` | 164 | 4 | seconds (stored in hundredths) | Initiator SRB CPU time, step initialisation part |
 | `smf30_missed_smf30blk` | 168 | 4 | integer | EXCP block counts that could not be recorded |
 | `smf30_missed_smf30dct` | 172 | 4 | integer | Device connect time that could not be recorded |
 | `smf30_highest_task_cpu_percent` | 176 | 2 | integer | Highest CPU percentage used by a single task |
@@ -248,21 +246,21 @@ section. The `steps`, `jobs` and `intervals` views leave continuation records ou
 | `smf30srb` | 8 | 4 | integer | SRB service units |
 | `smf30io` | 12 | 4 | integer | I/O service units |
 | `smf30mso` | 16 | 4 | integer | Main storage occupancy service units |
-| `smf30tat` | 20 | 4 | integer | Transaction active time (1.024 ms units) |
+| `smf30tat` | 20 | 4 | seconds (stored in 1.024 ms units) | Transaction active time |
 | `smf30sus` | 24 | 4 | integer | Service units consumed while the address space was swapped in |
-| `smf30res` | 28 | 4 | integer | Transaction residency time (1.024 ms units) |
+| `smf30res` | 28 | 4 | seconds (stored in 1.024 ms units) | Transaction residency time |
 | `smf30trs` | 32 | 4 | integer | Number of transactions |
 | `smf30wlm` | 36 | 8 | text (EBCDIC) | WLM workload name |
 | `smf30scn` | 44 | 8 | text (EBCDIC) | WLM service class name |
 | `smf30grn` | 52 | 8 | text (EBCDIC) | WLM resource group name |
 | `smf30rcn` | 60 | 8 | text (EBCDIC) | WLM report class name |
-| `smf30eta` | 68 | 4 | integer | Independent enclave transaction active time |
+| `smf30eta` | 68 | 4 | seconds (stored in 1.024 ms units) | Independent enclave transaction active time |
 | `smf30esu` | 72 | 4 | integer | Independent enclave CPU service units |
 | `smf30etc` | 76 | 4 | integer | Independent enclave transaction count |
-| `smf30jqt` | 96 | 4 | integer | Job queue time (1.024 ms units) |
-| `smf30rqt` | 100 | 4 | integer | Time the job waited ineligible because of a resource (1.024 ms units) |
-| `smf30hqt` | 104 | 4 | integer | Time the job was held (1.024 ms units) |
-| `smf30sqt` | 108 | 4 | integer | Time the job waited for an initiator after becoming eligible (1.024 ms units) |
+| `smf30jqt` | 96 | 4 | seconds (stored in 1.024 ms units) | Job preparation (JCL conversion) time, before the job was first queued for execution; 0 for non-batch work |
+| `smf30rqt` | 100 | 4 | seconds (stored in 1.024 ms units) | Time the job waited ineligible because of a resource |
+| `smf30hqt` | 104 | 4 | seconds (stored in 1.024 ms units) | Time the job was held |
+| `smf30sqt` | 108 | 4 | seconds (stored in 1.024 ms units) | Time the job waited for an initiator after becoming eligible |
 | `smf30pf1` | 112 | 1 | integer | Performance flags |
 | `smf30pf2` | 113 | 1 | integer | Performance flags 2 |
 | `smf30inv` | 114 | 1 | integer | Invocation indicator |

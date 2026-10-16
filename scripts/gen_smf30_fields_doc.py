@@ -184,9 +184,9 @@ DESC = {
 "SMF30SRB": "SRB service units",
 "SMF30IO": "I/O service units",
 "SMF30MSO": "Main storage occupancy service units",
-"SMF30TAT": "Transaction active time (1.024 ms units)",
+"SMF30TAT": "Transaction active time",
 "SMF30SUS": "Service units consumed while the address space was swapped in",
-"SMF30RES": "Transaction residency time (1.024 ms units)",
+"SMF30RES": "Transaction residency time",
 "SMF30TRS": "Number of transactions",
 "SMF30WLM": "WLM workload name",
 "SMF30SCN": "WLM service class name",
@@ -195,10 +195,10 @@ DESC = {
 "SMF30ETA": "Independent enclave transaction active time",
 "SMF30ESU": "Independent enclave CPU service units",
 "SMF30ETC": "Independent enclave transaction count",
-"SMF30JQT": "Job queue time (1.024 ms units)",
-"SMF30RQT": "Time the job waited ineligible because of a resource (1.024 ms units)",
-"SMF30HQT": "Time the job was held (1.024 ms units)",
-"SMF30SQT": "Time the job waited for an initiator after becoming eligible (1.024 ms units)",
+"SMF30JQT": "Job preparation (JCL conversion) time, before the job was first queued for execution; 0 for non-batch work",
+"SMF30RQT": "Time the job waited ineligible because of a resource",
+"SMF30HQT": "Time the job was held",
+"SMF30SQT": "Time the job waited for an initiator after becoming eligible",
 "SMF30PF1": "Performance flags",
 "SMF30PF2": "Performance flags 2",
 "SMF30INV": "Invocation indicator",
@@ -244,9 +244,9 @@ DESC = {
 }
 
 UNITS = {"sec100": "seconds (stored in hundredths)", "sec128us": "seconds (stored in 128 µs units)",
+         "sec1024us": "seconds (stored in 1.024 ms units)",
          "time": "datetime", "date": "date", "tod": "datetime (TOD clock, UTC)", "char": "text (EBCDIC)",
          "uint": "integer", "sint": "integer", "packed": "integer"}
-RAW = {f.name for f in t.PROCESSOR.fields if f.name.endswith(("_STEP_TERM","_STEP_INIT")) or f.name in ("SMF30CEPI","SMF30CRP")}
 TRIP = {t.TRIPLET_SUBSYSTEM:"SMF30SOF",t.TRIPLET_IDENT:"SMF30IOF",t.TRIPLET_IO:"SMF30UOF",t.TRIPLET_COMPLETION:"SMF30TOF",
         t.TRIPLET_PROCESSOR:"SMF30COF",t.TRIPLET_STORAGE:"SMF30ROF",t.TRIPLET_PERFORMANCE:"SMF30POF",t.TRIPLET_OPERATOR:"SMF30OOF",t.TRIPLET_EXCP:"SMF30EOF"}
 
@@ -256,7 +256,6 @@ def table(fields):
     for f in fields:
         desc=DESC.get(f.name) or missing.append(f.name) or ""
         kind=UNITS[f.kind]
-        if f.name in RAW: kind="integer, raw (units not yet confirmed)"
         out.append(f"| `{f.column}` | {f.offset} | {f.length} | {kind} | {desc} |")
     return "\n".join(out)
 
@@ -289,11 +288,9 @@ z/OS 2.5 records (record version `05`).
 
 **Conventions**
 - Text is decoded from EBCDIC (code page `input.codepage`, default `cp037`), with trailing blanks and binary zeros removed.
-- CPU times and connect times are converted to **seconds**.
+- CPU, connect, queue and residency times are converted to **seconds**, whatever unit they are stored in.
 - A time of day is combined with its date into a single datetime. `smf30ast` and `smf30pps` have no date of their
   own and use `smf30std`; if the result is earlier than `smf30sit`, it is moved to the next day (midnight rollover).
-- Fields marked *raw* are written as unconverted binary integers until their units are checked
-  against the IBM documentation. The same applies to queue and residency times documented in 1.024 ms units.
 
 ## Common header columns
 """)
