@@ -7,6 +7,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
+from .views import View
+
 
 @dataclass
 class ParseContext:
@@ -34,6 +36,10 @@ class RecordParser(ABC):
     @abstractmethod
     def schemas(self) -> dict[str, dict[str, str]]:
         """Every table this parser can emit: table name -> {column: pandas dtype}."""
+
+    def views(self) -> tuple[View, ...]:
+        """SQL views over this parser's tables, created by the database writers."""
+        return ()
 
     @abstractmethod
     def parse(self, rec: bytes, ctx: ParseContext) -> Iterator[tuple[str, dict[str, Any]]]:

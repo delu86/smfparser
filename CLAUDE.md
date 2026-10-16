@@ -37,6 +37,8 @@ developer guide). After changing `records/type30.py`, regenerate the field refer
   `chunk_rows` → all writers. A record that fails to parse is counted and logged, not fatal.
 - `writers/` — `files.py` (csv, json/jsonl, excel), `sql.py` (SQLAlchemy `to_sql`; batches capped by the
   driver's bind-parameter limit; DATETIME(6) on MySQL/MariaDB).
+- `views.py` — SQL views (`View`, per-dialect `Elapsed`); a parser lists its views in `views()` and `SqlWriter.finish`
+  recreates them after each run (type 30: `steps`, `jobs`, `intervals`, defined in `records/type30.py`).
 - `config.py` — YAML → dataclasses; relative paths resolve against the config file's directory; `${VAR}` env
   substitution for secrets.
 
@@ -49,4 +51,5 @@ Create `records/typeNN.py` with `Section` definitions and a `@register`ed `Recor
 ## Layout caveats
 
 SMF30 offsets follow the z/OS 2.x mapping and were checked against the sample data. The zAAP/zIIP time family
-and `SMF30ICU/ISB_STEP_TERM/INIT` are stored as raw binary values: their units are not yet confirmed.
+is in hundredths of a second (converted to seconds). `SMF30CEPI`, `SMF30CRP` and `SMF30ICU/ISB_STEP_TERM/INIT`
+are stored as raw binary values: their units are not yet confirmed.

@@ -246,7 +246,7 @@ DESC = {
 UNITS = {"sec100": "seconds (stored in hundredths)", "sec128us": "seconds (stored in 128 µs units)",
          "time": "datetime", "date": "date", "tod": "datetime (TOD clock, UTC)", "char": "text (EBCDIC)",
          "uint": "integer", "sint": "integer", "packed": "integer"}
-RAW = {f.name for f in t.PROCESSOR.fields if f.name.startswith("SMF30_TIME") or "_TIME_" in f.name or f.name.endswith(("_STEP_TERM","_STEP_INIT")) or f.name in ("SMF30CEPI","SMF30CRP")}
+RAW = {f.name for f in t.PROCESSOR.fields if f.name.endswith(("_STEP_TERM","_STEP_INIT")) or f.name in ("SMF30CEPI","SMF30CRP")}
 TRIP = {t.TRIPLET_SUBSYSTEM:"SMF30SOF",t.TRIPLET_IDENT:"SMF30IOF",t.TRIPLET_IO:"SMF30UOF",t.TRIPLET_COMPLETION:"SMF30TOF",
         t.TRIPLET_PROCESSOR:"SMF30COF",t.TRIPLET_STORAGE:"SMF30ROF",t.TRIPLET_PERFORMANCE:"SMF30POF",t.TRIPLET_OPERATOR:"SMF30OOF",t.TRIPLET_EXCP:"SMF30EOF"}
 

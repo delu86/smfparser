@@ -24,7 +24,7 @@ def smf_file(tmp_path):
         other,
         type30_record(subtype=4, excp=[("SYSUT1", 5)]),
         with_rdw(big[:600], seg=1),
-    ) + block(with_rdw(big[600:], seg=2), type30_record(subtype=5), type30_record(subtype=4, jobname="JOB2"))
+    ) + block(with_rdw(big[600:], seg=2), type30_record(subtype=5), type30_record(subtype=4, jobname="JOB2", ziip=200, ziip_nf=512))
     path = tmp_path / "dump.smf"
     path.write_bytes(data)
     return path
@@ -71,10 +71,45 @@ def test_end_to_end_outputs(tmp_path, smf_file):
     assert db["smf30cpt"].tolist() == [1.51, 1.51, 1.51]
     engine.dispose()
 
-    # Second run with if_exists=replace must not duplicate rows.
+    # Second run with if_exists=replace must not duplicate rows, and recreates the views.
     Pipeline(make_config(tmp_path)).run()
     engine = sa.create_engine(f"sqlite:///{out / 'smf.db'}")
     assert pd.read_sql("select count(*) n from smf30_4", engine)["n"][0] == 3
+    assert pd.read_sql("select count(*) n from steps", engine)["n"][0] == 3
+    engine.dispose()
+
+
+def test_views(tmp_path, smf_file):
+    Pipeline(make_config(tmp_path)).run()
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'out' / 'smf.db'}")
+    steps = pd.read_sql("select * from steps", engine)
+    assert list(steps.columns) == [
+        "system", "jobname", "stepname", "jobnumber", "stepnumber", "start_time", "end_time",
+        "elapsed_sec", "cp_cpu_sec", "ziip_cpu_sec", "potential_cp_cpu_sec",
+    ]
+    job2 = steps[steps["jobname"] == "JOB2"].iloc[0]
+    assert (job2["system"], job2["stepname"], job2["jobnumber"], job2["stepnumber"]) == ("SYSA", "STEP1", "JOB00042", 1)
+    assert job2["elapsed_sec"] == pytest.approx(1.0)  # 10:00:00.00 initiator select -> 10:00:01.00 record
+    assert job2["cp_cpu_sec"] == pytest.approx(1.55)
+    assert job2["ziip_cpu_sec"] == pytest.approx(2.0)
+    assert job2["potential_cp_cpu_sec"] == pytest.approx(1.55 + 2.0 * 512 / 256)
+    assert len(pd.read_sql("select * from jobs", engine)) == 1
+    # A continuation record (EXCP overflow: no processor section) is left out of the views.
+    with engine.begin() as conn:
+        conn.execute(sa.text("insert into smf30_4 (smf30jbn, smf30sit, smf_datetime) "
+                             "values ('JOB2', '2026-10-09 10:00:00', '2026-10-09 10:00:01')"))
+    assert len(pd.read_sql("select * from steps", engine)) == 3
+    # Subtypes 2/3 were filtered out: their tables are created empty so the view still works.
+    intervals = pd.read_sql("select * from intervals", engine)
+    assert intervals.empty and intervals.columns[1] == "subtype"
+    engine.dispose()
+
+
+def test_views_disabled(tmp_path, smf_file):
+    target = {"type": "sqlite", "path": "out/smf.db", "views": False}
+    Pipeline(make_config(tmp_path, output={"targets": [target]})).run()
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'out' / 'smf.db'}")
+    assert sa.inspect(engine).get_view_names() == []
     engine.dispose()
 
 

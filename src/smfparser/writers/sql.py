@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Sequence
 from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
 
+from ..views import View, render, supports
 from .base import Writer
+
+log = logging.getLogger(__name__)
 
 IF_EXISTS = ("append", "replace", "fail")
 
@@ -66,6 +71,28 @@ class SqlWriter(Writer):
             method="multi",
             dtype=self._column_types(df),
         )
+
+    def finish(self, schemas: dict[str, dict[str, str]], views: Sequence[View]) -> None:
+        """(Re)create the views. Missing source tables are created empty so every view works."""
+        if not views or not self.options.get("views", True):
+            return
+        dialect = self.engine.dialect.name
+        if not supports(dialect):
+            log.warning("views are not supported on %s; skipped", dialect)
+            return
+        from ..pipeline import to_frame  # the pipeline imports the writers
+
+        for view in views:
+            for src in view.sources:
+                if not sa.inspect(self.engine).has_table(self.prefix + src):
+                    df = to_frame([], schemas[src])
+                    df.to_sql(self.prefix + src, self.engine, index=False, dtype=self._column_types(df))
+        with self.engine.begin() as conn:
+            for view in views:
+                name = self.prefix + view.name
+                conn.execute(sa.text(f"DROP VIEW IF EXISTS {name}"))
+                conn.execute(sa.text(f"CREATE VIEW {name} AS\n{render(view, dialect, self.prefix)}"))
+        log.info("views created: %s", ", ".join(self.prefix + v.name for v in views))
 
     def _column_types(self, df: pd.DataFrame) -> dict[str, Any] | None:
         # MySQL/MariaDB DATETIME defaults to whole seconds; SMF times carry hundredths.

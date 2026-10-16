@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+from ..views import View
 
 
 class Writer(ABC):
@@ -21,6 +24,9 @@ class Writer(ABC):
 
     @abstractmethod
     def write(self, table: str, df: pd.DataFrame) -> None: ...
+
+    def finish(self, schemas: dict[str, dict[str, str]], views: Sequence[View]) -> None:  # noqa: B027
+        """Called once after the last chunk of a successful run (optional hook)."""
 
     def close(self) -> None:  # noqa: B027 - optional hook
         pass

@@ -154,21 +154,21 @@ The accounting section, which is variable length, becomes one column, `smf30act`
 | `smf30tf2` | 84 | 1 | integer | Additional timer flags |
 | `smf30t32` | 85 | 1 | integer | Failure flags |
 | `smf30t33` | 86 | 1 | integer | Failure flags 2 |
-| `smf30_time_on_ifa` | 88 | 4 | integer, raw (units not yet confirmed) | Time on zAAP |
-| `smf30_enclave_time_on_ifa` | 92 | 4 | integer, raw (units not yet confirmed) | Independent enclave time on zAAP |
-| `smf30_dep_enclave_time_on_ifa` | 96 | 4 | integer, raw (units not yet confirmed) | Dependent enclave time on zAAP |
-| `smf30_time_ifa_on_cp` | 100 | 4 | integer, raw (units not yet confirmed) | zAAP-eligible time that ran on a standard CP |
-| `smf30_enclave_time_ifa_on_cp` | 104 | 4 | integer, raw (units not yet confirmed) | Independent enclave zAAP-eligible time on a CP |
-| `smf30_dep_enclave_time_ifa_on_cp` | 108 | 4 | integer, raw (units not yet confirmed) | Dependent enclave zAAP-eligible time on a CP |
+| `smf30_time_on_ifa` | 88 | 4 | seconds (stored in hundredths) | Time on zAAP |
+| `smf30_enclave_time_on_ifa` | 92 | 4 | seconds (stored in hundredths) | Independent enclave time on zAAP |
+| `smf30_dep_enclave_time_on_ifa` | 96 | 4 | seconds (stored in hundredths) | Dependent enclave time on zAAP |
+| `smf30_time_ifa_on_cp` | 100 | 4 | seconds (stored in hundredths) | zAAP-eligible time that ran on a standard CP |
+| `smf30_enclave_time_ifa_on_cp` | 104 | 4 | seconds (stored in hundredths) | Independent enclave zAAP-eligible time on a CP |
+| `smf30_dep_enclave_time_ifa_on_cp` | 108 | 4 | seconds (stored in hundredths) | Dependent enclave zAAP-eligible time on a CP |
 | `smf30cepi` | 112 | 4 | integer, raw (units not yet confirmed) | Enqueue-promoted CPU time for the interval |
-| `smf30_time_on_ziip` | 116 | 4 | integer, raw (units not yet confirmed) | Time on zIIP |
-| `smf30_enclave_time_on_ziip` | 120 | 4 | integer, raw (units not yet confirmed) | Independent enclave time on zIIP |
-| `smf30_depenc_time_on_ziip` | 124 | 4 | integer, raw (units not yet confirmed) | Dependent enclave time on zIIP |
-| `smf30_time_ziip_on_cp` | 128 | 4 | integer, raw (units not yet confirmed) | zIIP-eligible time that ran on a standard CP |
-| `smf30_enclave_time_ziip_on_cp` | 132 | 4 | integer, raw (units not yet confirmed) | Independent enclave zIIP-eligible time on a CP |
-| `smf30_depenc_time_ziip_on_cp` | 136 | 4 | integer, raw (units not yet confirmed) | Dependent enclave zIIP-eligible time on a CP |
-| `smf30_enclave_time_ziip_qual` | 140 | 4 | integer, raw (units not yet confirmed) | Independent enclave time qualified to run on a zIIP |
-| `smf30_depenc_time_ziip_qual` | 144 | 4 | integer, raw (units not yet confirmed) | Dependent enclave time qualified to run on a zIIP |
+| `smf30_time_on_ziip` | 116 | 4 | seconds (stored in hundredths) | Time on zIIP |
+| `smf30_enclave_time_on_ziip` | 120 | 4 | seconds (stored in hundredths) | Independent enclave time on zIIP |
+| `smf30_depenc_time_on_ziip` | 124 | 4 | seconds (stored in hundredths) | Dependent enclave time on zIIP |
+| `smf30_time_ziip_on_cp` | 128 | 4 | seconds (stored in hundredths) | zIIP-eligible time that ran on a standard CP |
+| `smf30_enclave_time_ziip_on_cp` | 132 | 4 | seconds (stored in hundredths) | Independent enclave zIIP-eligible time on a CP |
+| `smf30_depenc_time_ziip_on_cp` | 136 | 4 | seconds (stored in hundredths) | Dependent enclave zIIP-eligible time on a CP |
+| `smf30_enclave_time_ziip_qual` | 140 | 4 | seconds (stored in hundredths) | Independent enclave time qualified to run on a zIIP |
+| `smf30_depenc_time_ziip_qual` | 144 | 4 | seconds (stored in hundredths) | Dependent enclave time qualified to run on a zIIP |
 | `smf30crp` | 148 | 4 | integer, raw (units not yet confirmed) | CPU time while promoted for chronic resource contention |
 | `smf30icu_step_term` | 152 | 4 | integer, raw (units not yet confirmed) | Initiator TCB CPU time, step termination part |
 | `smf30icu_step_init` | 156 | 4 | integer, raw (units not yet confirmed) | Initiator TCB CPU time, step initialisation part |

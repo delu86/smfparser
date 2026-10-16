@@ -10,9 +10,10 @@ src/smfparser/
   decoders.py         primitive formats: EBCDIC, binary, packed, SMF date/time, STCK
   layout.py           Field / Section / triplet: declarative section decoding
   registry.py         RecordParser base class, @register, supported_types()
+  views.py            View / Elapsed: SQL views over the parsed tables, rendered per dialect
   records/
     header.py         common header columns (HEADER_SCHEMA, parse_header)
-    type30.py         SMF type 30 sections and Type30Parser
+    type30.py         SMF type 30 sections, Type30Parser, steps/jobs/intervals views
   pipeline.py         read -> filter -> parse -> buffer -> DataFrame -> writers
   writers/
     base.py           Writer interface
@@ -119,10 +120,37 @@ Rules for `parse()`:
   `record_offset`, or get folded into one column (as type 30 does with accounting).
 - Options from `records: {NN: {...}}` arrive as `self.options.get(key, default)`.
 
+## Adding a view or view column
+
+A parser lists its views in `RecordParser.views()`, alongside `schemas()`. A `views.View` has:
+- a name;
+- its source tables, combined with `UNION ALL`;
+- `(alias, expression)` columns;
+- an optional `where` filter, applied to every source table.
+
+An expression is plain SQL, or `views.Elapsed(start, end)`. `views.render()` turns `Elapsed` into
+seconds using the right SQL for each dialect (SQLite, MySQL/MariaDB, PostgreSQL).
+
+At the end of a successful run, the pipeline calls `Writer.finish(schemas, views)`. `SqlWriter`:
+1. creates any missing source table empty from its schema;
+2. then drops and recreates every view in one transaction, applying `table_prefix` to tables and
+   views alike.
+
+The type 30 views live in `records/type30.py`:
+- `_view_columns()` holds the shared columns;
+- `CP_CPU_SQL`, `ZIIP_CPU_SQL` and `POTENTIAL_CP_CPU_SQL` hold the CPU formulas;
+- `VIEWS` lists the views. All three use `HAS_PROCESSOR_SQL` as their `where` filter, to drop EXCP
+  continuation records.
+
+To add a column, add a pair to `_view_columns()`, keeping the SQL portable. Then update the column
+table in [smf30-views.md](smf30-views.md) and the column list asserted in
+`tests/test_pipeline.py::test_views`.
+
 ## Adding an output format
 
 Subclass `writers.base.Writer`. `write(table, df)` is called once per chunk; chunks of one table
-always have identical columns. `close()` is called once, even after an error. Then register the
+always have identical columns. `finish(schemas, views)` is called once after a successful run
+(only the SQL writer uses it). `close()` is called once, even after an error. Then register the
 target type in `config.TARGET_TYPES` (with its required key) and in `writers.create_writer`.
 
 ## Tests
@@ -153,8 +181,9 @@ The script fails if a field has no description, so a new field can't be left und
 
 ## Known gaps
 
-- zAAP/zIIP time fields, `SMF30CEPI`, `SMF30CRP` and the `SMF30ICU/ISB_STEP_TERM/INIT` fields are
-  written as raw integers until their units are confirmed against the IBM documentation. Performance
+- `SMF30CEPI`, `SMF30CRP` and the `SMF30ICU/ISB_STEP_TERM/INIT` fields are written as raw integers
+  until their units are confirmed. The zAAP/zIIP time family is converted from hundredths of a second
+  (per the Pacific Systems Group layout, consistent with the sample data). Performance
   queue and residency times (`SMF30TAT`, `SMF30RES`, `SMF30JQT`, …) are also raw (1.024 ms units).
 - Type 30 sections not decoded yet: APPC/MVS resource, z/OS UNIX (OpenMVS) process, usage data
   (product/IFAUSAGE), counter data, zEDC and crypto sections.

@@ -14,6 +14,7 @@ from .config import Config
 from .reader import ReaderStats, read_records
 from .records.header import record_subtype, record_type
 from .registry import ParseContext, ParserOptions, RecordParser, supported_types
+from .views import View
 from .writers import Writer, create_writer
 
 log = logging.getLogger(__name__)
@@ -52,8 +53,10 @@ class Pipeline:
             for rtype, cls in supported_types().items()
         }
         self.schemas: dict[str, dict[str, str]] = {}
+        self.views: list[View] = []
         for parser in self.parsers.values():
             self.schemas.update(parser.schemas())
+            self.views.extend(parser.views())
         self.writers = writers if writers is not None else [create_writer(t, config) for t in config.targets]
         self.stats = RunStats()
         self._buffers: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -64,6 +67,8 @@ class Pipeline:
                 self.process_file(path)
             for table in list(self._buffers):
                 self._flush(table)
+            for w in self.writers:
+                w.finish(self.schemas, self.views)
         finally:
             for w in self.writers:
                 w.close()

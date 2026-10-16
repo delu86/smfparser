@@ -17,6 +17,7 @@ from .. import decoders as d
 from ..layout import Field as F
 from ..layout import Section, occurrences, triplet
 from ..registry import ParseContext, RecordParser, register
+from ..views import Elapsed, Expr, View
 from .header import HEADER_SCHEMA, parse_header
 
 SUBTYPES = (1, 2, 3, 4, 5, 6)
@@ -103,8 +104,9 @@ COMPLETION = Section("completion", (
     F("SMF30ARC", 4, 4),
 ))
 
-# CPU times are in hundredths of a second, converted to seconds. The zAAP/zIIP family and the
-# initiator step-term/init fields are kept as raw binary values until their units are confirmed.
+# CPU times, including the zAAP/zIIP family, are in hundredths of a second, converted to seconds.
+# SMF30CEPI, SMF30CRP and the initiator step-term/init fields are kept as raw binary values until
+# their units are confirmed.
 PROCESSOR = Section("processor", (
     F("SMF30PTY", 0, 2),
     F("SMF30TFL", 2, 2),
@@ -131,21 +133,21 @@ PROCESSOR = Section("processor", (
     F("SMF30TF2", 84, 1),
     F("SMF30T32", 85, 1),
     F("SMF30T33", 86, 1),
-    F("SMF30_TIME_ON_IFA", 88, 4),
-    F("SMF30_ENCLAVE_TIME_ON_IFA", 92, 4),
-    F("SMF30_DEP_ENCLAVE_TIME_ON_IFA", 96, 4),
-    F("SMF30_TIME_IFA_ON_CP", 100, 4),
-    F("SMF30_ENCLAVE_TIME_IFA_ON_CP", 104, 4),
-    F("SMF30_DEP_ENCLAVE_TIME_IFA_ON_CP", 108, 4),
+    F("SMF30_TIME_ON_IFA", 88, 4, "sec100"),
+    F("SMF30_ENCLAVE_TIME_ON_IFA", 92, 4, "sec100"),
+    F("SMF30_DEP_ENCLAVE_TIME_ON_IFA", 96, 4, "sec100"),
+    F("SMF30_TIME_IFA_ON_CP", 100, 4, "sec100"),
+    F("SMF30_ENCLAVE_TIME_IFA_ON_CP", 104, 4, "sec100"),
+    F("SMF30_DEP_ENCLAVE_TIME_IFA_ON_CP", 108, 4, "sec100"),
     F("SMF30CEPI", 112, 4),
-    F("SMF30_TIME_ON_ZIIP", 116, 4),
-    F("SMF30_ENCLAVE_TIME_ON_ZIIP", 120, 4),
-    F("SMF30_DEPENC_TIME_ON_ZIIP", 124, 4),
-    F("SMF30_TIME_ZIIP_ON_CP", 128, 4),
-    F("SMF30_ENCLAVE_TIME_ZIIP_ON_CP", 132, 4),
-    F("SMF30_DEPENC_TIME_ZIIP_ON_CP", 136, 4),
-    F("SMF30_ENCLAVE_TIME_ZIIP_QUAL", 140, 4),
-    F("SMF30_DEPENC_TIME_ZIIP_QUAL", 144, 4),
+    F("SMF30_TIME_ON_ZIIP", 116, 4, "sec100"),
+    F("SMF30_ENCLAVE_TIME_ON_ZIIP", 120, 4, "sec100"),
+    F("SMF30_DEPENC_TIME_ON_ZIIP", 124, 4, "sec100"),
+    F("SMF30_TIME_ZIIP_ON_CP", 128, 4, "sec100"),
+    F("SMF30_ENCLAVE_TIME_ZIIP_ON_CP", 132, 4, "sec100"),
+    F("SMF30_DEPENC_TIME_ZIIP_ON_CP", 136, 4, "sec100"),
+    F("SMF30_ENCLAVE_TIME_ZIIP_QUAL", 140, 4, "sec100"),
+    F("SMF30_DEPENC_TIME_ZIIP_QUAL", 144, 4, "sec100"),
     F("SMF30CRP", 148, 4),
     F("SMF30ICU_STEP_TERM", 152, 4),
     F("SMF30ICU_STEP_INIT", 156, 4),
@@ -310,12 +312,61 @@ def decode_accounting(rec: bytes, codepage: str) -> str | None:
     return ",".join(values)
 
 
+def _sum(*cols: str) -> str:
+    return " + ".join(f"COALESCE({c}, 0)" for c in cols)
+
+
+# CPU totals (seconds), after C. Watson, "The Many CPU Fields Of SMF" (2013). SMF30ASR, SMF30ENC,
+# SMF30DET and the *_ON_CP fields are already part of SMF30CPT, so they are not added again.
+CP_CPU_SQL = _sum("smf30cpt", "smf30cps", "smf30icu", "smf30isb", "smf30iip", "smf30rct", "smf30hpt")
+ZIIP_CPU_SQL = "COALESCE(smf30_time_on_ziip, 0)"
+# Work normalised to CP speed: SMF30ZNF/SMF30SNF are 256 when the specialty engines run at CP speed.
+POTENTIAL_CP_CPU_SQL = (
+    f"{CP_CPU_SQL}"
+    " + COALESCE(smf30_time_on_ifa, 0) * COALESCE(smf30znf, 0) / 256.0"
+    " + COALESCE(smf30_time_on_ziip, 0) * COALESCE(smf30snf, 0) / 256.0"
+)
+
+
+def _view_columns(start: str, *extra: tuple[str, Expr]) -> tuple[tuple[str, Expr], ...]:
+    """Columns shared by the steps/jobs/intervals views; `start` is the start-time column."""
+    return (
+        ("system", "smf_sid"),
+        *extra,
+        ("jobname", "smf30jbn"),
+        ("stepname", "smf30stm"),
+        ("jobnumber", "smf30jnm"),
+        ("stepnumber", "smf30stn"),
+        ("start_time", start),
+        ("end_time", "smf_datetime"),
+        ("elapsed_sec", Elapsed(start, "smf_datetime")),
+        ("cp_cpu_sec", CP_CPU_SQL),
+        ("ziip_cpu_sec", ZIIP_CPU_SQL),
+        ("potential_cp_cpu_sec", POTENTIAL_CP_CPU_SQL),
+    )
+
+
+# A step with too many DDs for one record is written as several records; the continuation records
+# carry only the subsystem, identification and EXCP sections. The views keep the first record only.
+HAS_PROCESSOR_SQL = "smf30cpt IS NOT NULL"
+
+VIEWS = (
+    View("steps", ("smf30_4",), _view_columns("smf30sit"), HAS_PROCESSOR_SQL),
+    View("jobs", ("smf30_5",), _view_columns("smf30sit"), HAS_PROCESSOR_SQL),
+    View("intervals", ("smf30_2", "smf30_3"), _view_columns("smf30ist", ("subtype", "smf_subtype")),
+         HAS_PROCESSOR_SQL),
+)
+
+
 @register
 class Type30Parser(RecordParser):
     record_type = 30
 
     def table_name(self, subtype: int) -> str:
         return f"smf30_{subtype}"
+
+    def views(self) -> tuple[View, ...]:
+        return VIEWS
 
     def _row_schema(self) -> dict[str, str]:
         schema = dict(HEADER_SCHEMA)

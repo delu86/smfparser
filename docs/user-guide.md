@@ -167,6 +167,7 @@ subtype for a day. Use CSV or a database for bulk data.
 | `if_exists` | all | `append` | What to do when a table already exists at the start of the run: `append`, `replace` (drop and recreate) or `fail`. |
 | `table_prefix` | all | `""` | Prefix added to every table name, e.g. `raw_`. |
 | `batch_rows` | all | `1000` | Rows per INSERT statement. It is capped automatically to stay under the driver's bind-parameter limit. |
+| `views` | all | `true` | Create the [`steps`, `jobs` and `intervals` views](smf30-views.md) at the end of the run. |
 
 The parser creates tables from the DataFrame types:
 - integers become `BIGINT`;
@@ -189,6 +190,7 @@ No indexes are created. Add your own, for example on `(smf30jbn, smf30jnm)` or `
 |---|---|
 | `smf30_1` … `smf30_6` | One row per type 30 record of that subtype. All six tables have the same columns. |
 | `smf30_excp` | One row per DD (only with `records: {30: {excp: true}}`). |
+| `steps`, `jobs`, `intervals` | Views (database outputs only) with readable names, elapsed time and CPU totals. See [SMF type 30 views](smf30-views.md). |
 
 Every row starts with the common columns `source_file`, `record_offset`, `smf_datetime`,
 `smf_type`, `smf_subtype`, `smf_sid`, `smf_ssi` and `smf_flag`. The record's own fields follow.
@@ -202,7 +204,7 @@ Value conventions:
 
 ### Example queries
 
-Top CPU consumers among steps (SQLite or MariaDB):
+Top CPU consumers among steps (SQLite or MariaDB). The [`steps` view](smf30-views.md) has a fuller CPU total:
 
 ```sql
 SELECT smf30jbn AS job, smf30jnm AS jobid, smf30stm AS step, smf30pgm AS program,
@@ -242,3 +244,4 @@ print(jobs.nlargest(10, "elapsed_s")[["smf30jbn", "smf30jnm", "elapsed_s", "smf3
 | `error: no input files match …` | Globs are resolved relative to the config file's directory. |
 | `environment variable X is not set` | The config contains `${X}`; export `X` before running. |
 | MariaDB `Unknown database` | Create the schema first; smfparser creates tables, not databases. |
+| Warning `views are not supported on …` | The database is not SQLite, MariaDB/MySQL or PostgreSQL. The tables are written, but the views are skipped. |

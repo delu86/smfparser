@@ -52,6 +52,8 @@ def type30_record(
     stepname: str = "STEP1",
     cpu_tcb: int = 151,  # hundredths
     cpu_srb: int = 4,
+    ziip: int = 0,  # hundredths
+    ziip_nf: int = 256,  # SMF30SNF
     accounting: list[str] | None = None,
     excp: list[tuple[str, int]] | None = None,  # (ddname, blocks)
     ident_length: int = 250,
@@ -87,6 +89,7 @@ def type30_record(
     processor[2:4] = u(0x8000, 2)
     processor[4:8] = u(cpu_tcb, 4)
     processor[8:12] = u(cpu_srb, 4)
+    processor[116:120] = u(ziip, 4)
     processor[40:44] = bytes.fromhex("0000000F")  # zero packed date (no interval start)
     processor[178:186] = e("IEFBR14", 8)
     processor = bytes(processor)
@@ -94,6 +97,7 @@ def type30_record(
     performance[0:4] = u(48, 4)
     performance[36:44] = e("BATCH", 8)
     performance[44:52] = e("BTHIGH", 8)
+    performance[136:138] = u(ziip_nf, 2)
     performance = bytes(performance)
     acct = b"".join(bytes([len(a)]) + e(a, len(a)) for a in accounting)
     excp_bytes = b"".join(u(0x20, 1) + u(0x0F, 1) + u(0x1234, 2) + e(dd, 8) + u(blk, 4) + u(27998, 2)
