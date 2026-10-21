@@ -1,3 +1,4 @@
+from smfparser.records.type14 import Type14Parser, Type15Parser
 from smfparser.records.type30 import VIEWS
 from smfparser.views import Elapsed, View, elapsed_sql, render, supports
 
@@ -26,3 +27,12 @@ def test_type30_views():
     assert "TIMESTAMPDIFF(MICROSECOND, smf30ist, smf_datetime)" in sql
     # Continuation records (no processor section) are filtered out of both UNION branches.
     assert sql.count("WHERE NOT continuation") == 2
+
+
+def test_datasets_view():
+    [view] = Type14Parser().views()
+    assert view.name == "datasets" and view.sources == ("smf14", "smf15")
+    assert Type15Parser().views() == ()
+    # Every column the view selects exists in both tables.
+    columns = set(Type14Parser().schemas()["smf14"])
+    assert {expr for _, expr in view.columns} <= columns

@@ -16,8 +16,8 @@ SAMPLE = Path(__file__).resolve().parent.parent / "smf_files" / "xcsmfp02.smfalt
 
 @pytest.fixture
 def smf_file(tmp_path):
-    """Blocked dump with type 30 subtypes 1/4/5, a spanned type 30 and an unrelated type 14."""
-    other = with_rdw(header(14, None, 0, date(2026, 10, 9)))
+    """Blocked dump with type 30 subtypes 1/4/5, a spanned type 30 and an unrelated type 26."""
+    other = with_rdw(header(26, None, 0, date(2026, 10, 9)))
     big = record_body(type30_record(subtype=4, jobname="BIGJOB", excp=[(f"DD{i}", i) for i in range(50)]))
     data = block(
         type30_record(subtype=1),
@@ -146,4 +146,5 @@ def test_sample_dump_counts(tmp_path):
     assert stats.reader.orphan_segments == 0 and not stats.failed
     assert {t: n for t, n in stats.rows.items()} == {
         "smf30_1": 110, "smf30_2": 164, "smf30_3": 470, "smf30_4": 471, "smf30_5": 101, "smf30_6": 14,
+        "smf14": 1376, "smf15": 371,
     }

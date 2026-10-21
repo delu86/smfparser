@@ -56,6 +56,6 @@ def register(cls: type[RecordParser]) -> type[RecordParser]:
 
 def supported_types() -> dict[int, type[RecordParser]]:
     # Importing the record modules registers their parsers.
-    from .records import type30  # noqa: F401
+    from .records import type14, type30  # noqa: F401
 
     return dict(_REGISTRY)

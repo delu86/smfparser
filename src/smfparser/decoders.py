@@ -57,6 +57,19 @@ def smf_date(b: bytes) -> date | None:
         return None
 
 
+def jfcb_date(b: bytes) -> date | None:
+    """3-byte JFCB date: binary year offset from 1900, then binary day of year. None for zero/invalid."""
+    if len(b) < 3:
+        return None
+    day = uint(b[1:3])
+    if day < 1 or day > 366:
+        return None
+    try:
+        return date(1900 + b[0], 1, 1) + timedelta(days=day - 1)
+    except ValueError:
+        return None
+
+
 def hundredths(b: bytes) -> float:
     """Binary count of hundredths of a second, as seconds."""
     return uint(b) / 100

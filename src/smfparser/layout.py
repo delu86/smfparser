@@ -21,6 +21,7 @@ KINDS: dict[str, tuple[Callable[[bytes, str], Any], str]] = {
     "sint": (lambda b, cp: d.sint(b), "Int64"),
     "packed": (lambda b, cp: d.packed(b), "Int64"),
     "date": (lambda b, cp: d.smf_date(b), "datetime64[us]"),
+    "jfcbdate": (lambda b, cp: d.jfcb_date(b), "datetime64[us]"),
     # seconds, from hundredths of a second / 128-microsecond / 1.024-millisecond units
     "sec100": (lambda b, cp: d.hundredths(b), "Float64"),
     "sec128us": (lambda b, cp: d.units_128us(b), "Float64"),

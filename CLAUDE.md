@@ -7,10 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Python parser for IBM z/OS SMF binary dumps. Reads the raw dataset (RECFM=VBS, transferred in
 binary with BDWs/RDWs kept), filters records by type/subtype per a YAML config, decodes them into
 pandas DataFrames, and writes CSV, JSON, Excel, SQLite, MariaDB or any SQLAlchemy URL.
-Currently supported: SMF type 30 (subtypes 1-6). Sample dumps live in `smf_files/` (git-ignored).
+Currently supported: SMF types 14/15 and 30 (subtypes 1-6). Sample dumps live in `smf_files/` (git-ignored).
 Documentation lives in `docs/` (user guide, input format, generated SMF30 field reference,
-developer guide). After changing `records/type30.py`, regenerate the field reference with
-`.venv/bin/python scripts/gen_smf30_fields_doc.py docs/smf30-fields.md`.
+developer guide). After changing `records/type30.py` or `records/type14.py`, regenerate the field reference with
+`.venv/bin/python scripts/gen_smf30_fields_doc.py docs/smf30-fields.md` /
+`.venv/bin/python scripts/gen_smf14_fields_doc.py docs/smf14-fields.md`.
 
 ## Toolchain and commands
 
@@ -34,12 +35,17 @@ developer guide). After changing `records/type30.py`, regenerate the field refer
 - `records/type30.py` — SMF30 section definitions (column names = IBM field names, lower case). One flat table per
   subtype (`smf30_1`..`smf30_6`), plus a derived
   `continuation` flag (overflow records with no processor section; excluded from the views); repeating EXCP section optionally goes to `smf30_excp` (`records: {30: {excp: true}}`).
+- `records/type14.py` — SMF14/15 (same layout, one `DatasetActivityParser` base, tables `smf14`/`smf15`). Fixed part
+  at record offsets (tape vs DASD DCB extension chosen by `SMF14RIN`), then `SMF14NUC` UCB sections (optional
+  `smf14_ucb`/`smf15_ucb`, `records: {14: {ucb: true}}`), Hiperbatch, and the extended segment whose typed sections
+  (SMF14STY 1-9) are flattened into the row. Derived `dsorg`/`recfm`/`disp`/`excp_total`; view `datasets`.
 - `pipeline.py` — read → filter → parse → per-table buffers → DataFrames with fixed schema/dtypes every
   `chunk_rows` → all writers. A record that fails to parse is counted and logged, not fatal.
 - `writers/` — `files.py` (csv, json/jsonl, excel), `sql.py` (SQLAlchemy `to_sql`; batches capped by the
   driver's bind-parameter limit; DATETIME(6) on MySQL/MariaDB).
 - `views.py` — SQL views (`View`, per-dialect `Elapsed`); a parser lists its views in `views()` and `SqlWriter.finish`
-  recreates them after each run (type 30: `steps`, `jobs`, `intervals`, defined in `records/type30.py`).
+  recreates them after each run (type 30: `steps`, `jobs`, `intervals`, defined in `records/type30.py`;
+  types 14/15: `datasets`).
 - `config.py` — YAML → dataclasses; relative paths resolve against the config file's directory; `${VAR}` env
   substitution for secrets.
 
@@ -55,3 +61,7 @@ SMF30 offsets follow the z/OS 2.x mapping and were checked against the sample da
 converted to seconds. Most are in hundredths of a second. The promoted times (`SMF30CEP/CEPI/CRP`) and the
 queue/residency times (`SMF30TAT/RES/ETA/JQT/RQT/HQT/SQT`) are in 1.024 ms units (`sec1024us`). Units come from
 pacsys and the IBM SMF Explorer descriptions; the IBM SMF Explorer offsets are wrong, so don't use them.
+
+SMF14/15 follow the z/OS 2.5 SMF manual (PDF `ieag200_v2r5.pdf`, which has every record layout). In the extended
+sections the manual counts types 5, 6 and 7 from after the 4-byte descriptor and the others from its start;
+`type14.py` counts every section from the start of its descriptor.

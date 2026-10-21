@@ -130,3 +130,69 @@ def type30_record(
         payload += data
         pos += len(data)
     return with_rdw(hdr + triplets + payload)
+
+
+def ext_section(sty: int, data: bytes) -> bytes:
+    """An extended information section of a type 14/15 record: descriptor + data."""
+    return u(len(data) + 4, 2) + b"\x00" + bytes([sty]) + data
+
+
+def type14_record(
+    rtype: int = 14,
+    dasd: bool = True,
+    ddname: str = "SYSUT1",
+    dsname: str = "USER.TEST.DATA",
+    volumes: list[tuple[str, int, int]] | None = None,  # (volser, excp, tracks or tape sequence)
+    hiperbatch: bool = False,
+    extended: list[bytes] | None = None,  # ext_section() entries; default SMS + step sections
+    d: date = date(2026, 10, 9),
+) -> bytes:
+    """A type 14/15 record (with RDW): fixed part, UCB sections, optional Hiperbatch section and
+    extended information segment."""
+    volumes = volumes if volumes is not None else [("VOL001", 12, 150)]
+    if extended is None:
+        extended = [
+            ext_section(2, e("MCSTD", 8) + e("DCSTD", 8) + e("SCSTD", 8)),
+            ext_section(3, e("STEP1", 8) + e("IEBGENER", 8) + e("JOB00042", 8) + e("PLEX1", 8)),
+        ]
+    rin = (0x2000 if dasd else 0) | (0x0008 if hiperbatch else 0) | (0x0004 if extended else 0)
+
+    fixed = bytearray(264)  # record offsets 4..268 (indexes are offset - 4)
+    fixed[0:14] = header(rtype, None, 3_600_100, d)  # offsets 4..18
+    fixed[14:22] = e("MYJOB", 8)  # SMF14JBN at 18
+    fixed[22:26] = u(8_639_990, 4)  # SMF14RST: 23:59:59.90 the day before
+    fixed[26:30] = smf_date_bytes(d - timedelta(days=1))
+    fixed[38:40] = u(rin, 2)  # SMF14RIN at 42
+    fixed[40:44] = bytes([28, len(volumes), 24, 0])  # SDC, NUC, SUC, SET
+    fixed[44:48] = u(3_600_000, 4)  # SMF14OPE at 48: 10:00:00.00
+    fixed[52:60] = e(ddname, 8)  # SMF14TIOE5 at 56
+    fixed[64:108] = e(dsname, 44)  # JFCBDSNM at 68
+    fixed[144:147] = bytes([126]) + u(282, 2)  # JFCBCRDT at 148: 2026.282
+    fixed[151] = 0x48 if rtype == 14 else 0xC0  # JFCBIND2 at 155: SHR / NEW
+    fixed[162:164] = u(0x4000, 2)  # JFCDSORG at 166: PS
+    fixed[164] = 0x90  # JFCRECFM at 168: FB
+    fixed[166:168] = u(27920, 2)  # JFCBLKSI at 170
+    fixed[168:170] = u(80, 2)  # JFCLRECL at 172
+    fixed[181] = len(volumes)  # JFCBNVOL at 185
+    for i, (vol, _, _) in enumerate(volumes[:5]):
+        fixed[182 + 6 * i : 188 + 6 * i] = e(vol, 6)
+    fixed[240:242] = u(0x4000, 2)  # SMF14DCBOR at 244
+    fixed[242] = 0x90  # SMF14DCBRF at 246
+    if dasd:
+        fixed[252:256] = u(0x00050100, 4)  # SMF14NTU at 256
+        fixed[256:260] = u(3, 4)  # SMF14NTR at 260
+    else:
+        fixed[252:256] = u(777, 4)  # SMF14DCBBL at 256
+        fixed[256:262] = e("VOL001", 6)  # SMF14DSSNO at 260
+    body = bytes(fixed) + smf_date_bytes(d)  # SMF14OPD at 268
+
+    for i, (vol, excp, extra) in enumerate(volumes):
+        ucb = u(0x1234 + i, 2) + e(vol, 6) + u(0x3030200F if dasd else 0x78048081, 4) + bytes([0x10, 1]) + b"\0\0"
+        ucb += u(excp, 4) + (u(extra, 4) if dasd else u(1, 2) + u(extra, 2))
+        body += ucb
+    if hiperbatch:
+        body += u(10, 4) + u(7, 4) + u(1, 4) + u(3, 4) + u(2, 4)
+    if extended:
+        segment = b"".join(extended)
+        body += u(len(segment) + 2, 2) + segment
+    return with_rdw(body)

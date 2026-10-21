@@ -83,6 +83,8 @@ filter:
 records:
   30:
     excp: false               # true adds the smf30_excp table
+  14:
+    ucb: false                # true adds the smf14_ucb table (one row per volume)
 
 output:
   chunk_rows: 50000
@@ -117,6 +119,7 @@ Options for each record type, keyed by type number.
 | Type | Key | Default | Meaning |
 |---|---|---|---|
 | 30 | `excp` | `false` | Also write `smf30_excp`, one row per DD from the EXCP section. This table can be very large: about 75 rows per type 30 record in typical batch workloads. |
+| 14, 15 | `ucb` | `false` | Also write `smf14_ucb` / `smf15_ucb`, one row per volume (device number, volser, EXCP count, tracks allocated). Most data sets use one volume; `smf14`/`smf15` already carry the totals and the volser list. |
 
 ### `output`
 
@@ -167,7 +170,7 @@ subtype for a day. Use CSV or a database for bulk data.
 | `if_exists` | all | `append` | What to do when a table already exists at the start of the run: `append`, `replace` (drop and recreate) or `fail`. |
 | `table_prefix` | all | `""` | Prefix added to every table name, e.g. `raw_`. |
 | `batch_rows` | all | `1000` | Rows per INSERT statement. It is capped automatically to stay under the driver's bind-parameter limit. |
-| `views` | all | `true` | Create the [`steps`, `jobs` and `intervals` views](smf30-views.md) at the end of the run. |
+| `views` | all | `true` | Create the views at the end of the run: [`steps`, `jobs` and `intervals`](smf30-views.md) (type 30) and [`datasets`](smf14-fields.md#the-datasets-view) (types 14/15). |
 
 The parser creates tables from the DataFrame types:
 - integers become `BIGINT`;
@@ -191,12 +194,16 @@ No indexes are created. Add your own, for example on `(smf30jbn, smf30jnm)` or `
 | `smf30_1` … `smf30_6` | One row per type 30 record of that subtype. All six tables have the same columns. |
 | `smf30_excp` | One row per DD (only with `records: {30: {excp: true}}`). |
 | `steps`, `jobs`, `intervals` | Views (database outputs only) with readable names, elapsed time and CPU totals. See [SMF type 30 views](smf30-views.md). |
+| `smf14`, `smf15` | One row per non-VSAM data set close or end of volume: type 14 for input, type 15 for output. Both tables have the same columns. |
+| `smf14_ucb`, `smf15_ucb` | One row per volume (only with `records: {14: {ucb: true}}` / `{15: …}`). |
+| `datasets` | View over `smf14` and `smf15` (database outputs only). See [SMF types 14/15](smf14-fields.md#the-datasets-view). |
 
 Every row starts with the common columns `source_file`, `record_offset`, `smf_datetime`,
 `smf_type`, `smf_subtype`, `smf_sid`, `smf_ssi` and `smf_flag`. The record's own fields follow. Type 30
 tables end with `continuation`, which is true for the overflow records z/OS writes when a step has
 too many DDs for one record.
-They are listed with their meaning and units in the [SMF type 30 field reference](smf30-fields.md).
+They are listed with their meaning and units in the [SMF type 30 field reference](smf30-fields.md)
+and the [SMF types 14/15 field reference](smf14-fields.md).
 
 Value conventions:
 - Text is decoded from EBCDIC, with trailing blanks removed.

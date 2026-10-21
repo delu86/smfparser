@@ -13,6 +13,7 @@ src/smfparser/
   views.py            View / Elapsed: SQL views over the parsed tables, rendered per dialect
   records/
     header.py         common header columns (HEADER_SCHEMA, parse_header)
+    type14.py         SMF types 14/15 sections, Type14Parser/Type15Parser, datasets view
     type30.py         SMF type 30 sections, Type30Parser, steps/jobs/intervals views
   pipeline.py         read -> filter -> parse -> buffer -> DataFrame -> writers
   writers/
@@ -21,6 +22,7 @@ src/smfparser/
     sql.py            SqlWriter (SQLite, MariaDB, any SQLAlchemy URL)
 scripts/
   gen_smf30_fields_doc.py   regenerates docs/smf30-fields.md
+  gen_smf14_fields_doc.py   regenerates docs/smf14-fields.md
 tests/
   smfbuild.py         builders for synthetic records, blocks and dumps
   test_*.py
@@ -66,6 +68,7 @@ Key design points:
 | `uint`, `sint` | big-endian integer | `Int64` |
 | `packed` | packed decimal | `Int64` |
 | `date` | `0cyydddF` → `date` | `datetime64[us]` |
+| `jfcbdate` | 3-byte JFCB date (year − 1900, day of year) → `date` | `datetime64[us]` |
 | `time` | hundredths since midnight + `date=` field → `datetime` (optional `not_before=` for midnight rollover) | `datetime64[us]` |
 | `tod` | STCK → `datetime` | `datetime64[us]` |
 | `sec100` | hundredths → seconds | `Float64` |
@@ -169,13 +172,14 @@ target type in `config.TARGET_TYPES` (with its required key) and in `writers.cre
   `docker run --rm -d -p 127.0.0.1:33306:3306 -e MARIADB_ROOT_PASSWORD=x -e MARIADB_DATABASE=smf mariadb:11`.
   Then run with a `mariadb` target on port 33306.
 
-## Regenerating the type 30 field reference
+## Regenerating the field references
 
-`docs/smf30-fields.md` is generated from the `Section` definitions in `records/type30.py`, plus
-the descriptions in `scripts/gen_smf30_fields_doc.py`:
+`docs/smf30-fields.md` and `docs/smf14-fields.md` are generated from the `Section` definitions in
+`records/type30.py` and `records/type14.py`, plus the descriptions in the matching script:
 
 ```sh
 .venv/bin/python scripts/gen_smf30_fields_doc.py docs/smf30-fields.md
+.venv/bin/python scripts/gen_smf14_fields_doc.py docs/smf14-fields.md
 ```
 
 The script fails if a field has no description, so a new field can't be left undocumented.
@@ -189,4 +193,8 @@ The script fails if a field has no description, so a new field can't be left und
     `SMF30TAT`, `RES`, `ETA`, `JQT`, `RQT`, `HQT`, `SQT`.
 - Type 30 sections not decoded yet: APPC/MVS resource, z/OS UNIX (OpenMVS) process, usage data
   (product/IFAUSAGE), counter data, zEDC and crypto sections.
-- Flag fields (`SMF30STI`, `SMF30TFL`, …) are written as integers, not broken into bits.
+- Flag fields (`SMF30STI`, `SMF30TFL`, `SMF14RIN`, …) are written as integers, not broken into bits.
+- Types 14/15: the layout is from the z/OS 2.5 SMF manual. The extended sections 4 (CCSID),
+  7 (tape encryption) and 9 (DASD encryption) never occurred in the sample data, so their offsets
+  are unverified. The JFCB is decoded only partly (the commonly used fields), and the obsolete
+  ISAM extension section is skipped.

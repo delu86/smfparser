@@ -6,17 +6,20 @@ A Python parser for IBM z/OS **SMF** (System Management Facility) binary dumps. 
 records, keeps the record types and subtypes you choose, decodes them with pandas, and writes
 **CSV, JSON, Excel, SQLite, MariaDB** or any database SQLAlchemy supports.
 
-Supported record types: **30** (common address space work: job, step and interval accounting, subtypes 1–6).
+Supported record types:
+- **14/15** (non-VSAM data set activity: one row per input/output data set close or end of volume);
+- **30** (common address space work: job, step and interval accounting, subtypes 1–6).
 
 ## Features
 
 - Reads blocked (BDW) and unblocked (RDW-only) binary dumps, and reassembles spanned records.
 - Decodes EBCDIC, packed-decimal dates, TOD clocks and CPU-time units into proper text,
   datetimes and seconds.
-- Writes one flat table per subtype, with IBM field names as columns, plus an optional per-DD
-  EXCP table. Overflow (continuation) records are flagged in a `continuation` column.
+- Writes one flat table per record type or subtype, with IBM field names as columns, plus optional
+  per-DD (type 30 EXCP) and per-volume (type 14/15 UCB) tables. Overflow (continuation) records are flagged in a `continuation` column.
 - In databases, creates the `steps`, `jobs` and `intervals` views. They show elapsed time and CP,
-  zIIP and normalised CPU totals per step, job and interval.
+  zIIP and normalised CPU totals per step, job and interval. A `datasets` view lists every data
+  set opened, with job, step, DD name, DSORG/RECFM/DISP, volumes and EXCP count.
 - Uses a YAML config for filters, code page, output targets and database credentials (taken from
   environment variables).
 - Streams the input and writes in chunks, so large dumps don't need to fit in memory.
@@ -52,6 +55,7 @@ output:
 - [SMF input format](docs/smf-input-format.md): getting SMF data off z/OS and how records are laid out
 - [SMF type 30 field reference](docs/smf30-fields.md): every output column with offset, units and meaning
 - [SMF type 30 views](docs/smf30-views.md): the `steps`, `jobs` and `intervals` views, and their CPU formulas
+- [SMF types 14/15 field reference](docs/smf14-fields.md): data set activity columns and the `datasets` view
 - [Developer guide](docs/developer-guide.md): architecture, adding record types or output formats, tests
 
 ## Development
