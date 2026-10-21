@@ -244,6 +244,19 @@ jobs["elapsed_s"] = (jobs["smf_datetime"] - jobs["smf30sit"]).dt.total_seconds()
 print(jobs.nlargest(10, "elapsed_s")[["smf30jbn", "smf30jnm", "elapsed_s", "smf30cpt"]])
 ```
 
+Data sets a job read and wrote, from the [`datasets` view](smf14-fields.md#the-datasets-view)
+(types 14 and 15). Counts are cumulative within a step, so take the last close per DD:
+
+```sql
+SELECT stepname, ddname, dsname,
+       CASE smf_type WHEN 14 THEN 'input' ELSE 'output' END AS direction,
+       dsorg, recfm, disp, MAX(excp) AS excp, MAX(close_time) AS closed
+FROM datasets
+WHERE jobname = 'MYJOB'
+GROUP BY stepname, ddname, dsname, smf_type, dsorg, recfm, disp
+ORDER BY closed;
+```
+
 ## Troubleshooting
 
 | Symptom | Likely cause |

@@ -8,8 +8,8 @@ Python parser for IBM z/OS SMF binary dumps. Reads the raw dataset (RECFM=VBS, t
 binary with BDWs/RDWs kept), filters records by type/subtype per a YAML config, decodes them into
 pandas DataFrames, and writes CSV, JSON, Excel, SQLite, MariaDB or any SQLAlchemy URL.
 Currently supported: SMF types 14/15 and 30 (subtypes 1-6). Sample dumps live in `smf_files/` (git-ignored).
-Documentation lives in `docs/` (user guide, input format, generated SMF30 field reference,
-developer guide). After changing `records/type30.py` or `records/type14.py`, regenerate the field reference with
+Documentation lives in `docs/` (user guide, input format, generated SMF30 and SMF14/15 field references,
+SMF30 views, developer guide). After changing `records/type30.py` or `records/type14.py`, regenerate the field reference with
 `.venv/bin/python scripts/gen_smf30_fields_doc.py docs/smf30-fields.md` /
 `.venv/bin/python scripts/gen_smf14_fields_doc.py docs/smf14-fields.md`.
 

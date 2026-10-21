@@ -66,7 +66,7 @@ Offsets are from the start of the record, RDW included.
 | `smf14tioe2` | 53 | 1 | integer | TIOT status byte (TIOESTTA): tape label processing, unallocation, rewind/unload |
 | `smf14tioe3` | 54 | 1 | integer | Number of devices requested at allocation (TIOEWTCT) |
 | `smf14tioe4` | 55 | 1 | integer | Data set and device indicator (TIOELINK) |
-| `smf14tioe5` | 56 | 8 | text (EBCDIC) | DD name (TIOEDDNM) |
+| `smf14tioe5` | 56 | 8 | text (EBCDIC) | DD name (TIOEDDNM). Blank for the second and later data sets of a concatenation |
 | `smf14tioe7` | 67 | 1 | integer | TIOESTTC byte |
 | `jfcbdsnm` | 68 | 44 | text (EBCDIC) | Data set name (DSNAME=) |
 | `jfcbelnm` | 112 | 8 | text (EBCDIC) | Member name or relative generation number, e.g. `+1` |

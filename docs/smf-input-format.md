@@ -82,6 +82,11 @@ layout can change between z/OS releases without breaking parsers. A section can 
 than the fields smfparser knows about (newer release) or shorter (older release). Unknown trailing
 bytes are ignored. Known fields that lie past the end of the section come out empty.
 
+Older record types don't use triplets. Types 14 and 15, for example, have a fixed part at fixed
+offsets, then a variable number of UCB sections (count and length given in the fixed part), then
+an *extended information segment* of sections that each start with their own length and type.
+See the [SMF types 14/15 field reference](smf14-fields.md).
+
 ## Data formats
 
 | Format | Encoding | How smfparser decodes it |

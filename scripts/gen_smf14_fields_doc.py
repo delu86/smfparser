@@ -34,7 +34,7 @@ DESC = {
 "SMF14TIOE2": "TIOT status byte (TIOESTTA): tape label processing, unallocation, rewind/unload",
 "SMF14TIOE3": "Number of devices requested at allocation (TIOEWTCT)",
 "SMF14TIOE4": "Data set and device indicator (TIOELINK)",
-"SMF14TIOE5": "DD name (TIOEDDNM)",
+"SMF14TIOE5": "DD name (TIOEDDNM). Blank for the second and later data sets of a concatenation",
 "SMF14TIOE7": "TIOESTTC byte",
 "JFCBDSNM": "Data set name (DSNAME=)",
 "JFCBELNM": "Member name or relative generation number, e.g. `+1`",
