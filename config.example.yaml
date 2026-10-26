@@ -13,6 +13,7 @@ filter:
     14: []
     15: []
     30: [1, 2, 3, 4, 5, 6]
+    110: [1]               # CICS monitoring (needs records.110.dictionary)
   # type -> subtypes to drop ([] = all subtypes), applied after `include`.
   exclude: {}
 
@@ -23,6 +24,10 @@ records:
     ucb: false              # true adds table smf14_ucb (one row per volume)
   15:
     ucb: false              # true adds table smf15_ucb
+  110:
+    dictionary: smf_files/dictionary.bin  # SMF 110 file holding the CICS monitoring dictionary record
+    local_time: true        # convert CICS STCK timestamps (UTC) to the record's local time
+    hex: []                 # extra character fields (informal names) to write as hex
 
 output:
   chunk_rows: 50000         # rows buffered per table before writing

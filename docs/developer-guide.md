@@ -167,7 +167,12 @@ target type in `config.TARGET_TYPES` (with its required key) and in `writers.cre
 - `tests/smfbuild.py` builds headers, type 30 records, RDW segments and BDW blocks, so tests don't
   depend on real data.
 - `test_sample_dump_counts` runs against `smf_files/` when it exists (the directory is git-ignored)
-  and checks the row count of each subtype.
+  and checks the row count of each subtype. `test_sample_cics_dump` does the same for type 110 when
+  `smf_files/xcsmfp02.smfcics.d261026.t111500` and `smf_files/dictionary.bin` exist. If EPV's export of
+  the same dump is in `smf_files/epv_files/SMF.xcsmfp02.smfcics.d261026.t111500.261026_115439/`, it also
+  compares every transaction with EPV's `EPV110_1_TrxAcct` (95 columns, about a minute). EPV quirks the test
+  allows for: WMQGETWT/TSIOWTT/RMIMQM `…TM` columns hold the clock count, RSYSID is written as hex,
+  INTRESPDUR is our `internal_response` (`elapsed − tciowtt_009`), and non-ASCII characters are blanked.
 - MariaDB isn't tested automatically. To test it by hand, start a throwaway server:
   `docker run --rm -d -p 127.0.0.1:33306:3306 -e MARIADB_ROOT_PASSWORD=x -e MARIADB_DATABASE=smf mariadb:11`.
   Then run with a `mariadb` target on port 33306.
@@ -180,7 +185,11 @@ target type in `config.TARGET_TYPES` (with its required key) and in `writers.cre
 ```sh
 .venv/bin/python scripts/gen_smf30_fields_doc.py docs/smf30-fields.md
 .venv/bin/python scripts/gen_smf14_fields_doc.py docs/smf14-fields.md
+.venv/bin/python scripts/gen_smf110_fields_doc.py smf_files/dictionary.bin docs/smf110-fields.md
 ```
+
+`docs/smf110-fields.md` is built from a CICS dictionary record instead: the type 110 columns are not
+fixed in the code but come from the dictionary.
 
 The script fails if a field has no description, so a new field can't be left undocumented.
 
@@ -198,3 +207,7 @@ The script fails if a field has no description, so a new field can't be left und
   7 (tape encryption) and 9 (DASD encryption) never occurred in the sample data, so their offsets
   are unverified. The JFCB is decoded only partly (the commonly used fields), and the obsolete
   ISAM extension section is skipped.
+- Type 110: only subtype 1 performance (class 3) records are decoded. Exception (4), transaction
+  resource (5) and identity (6) records, and the subtype 2 statistics, are skipped. Compressed
+  performance records are not expanded (none occurred in the sample). One dictionary, from a file,
+  applies to every region; in-stream dictionary records are ignored.

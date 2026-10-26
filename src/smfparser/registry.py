@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, ClassVar
 
 from .views import View
@@ -22,9 +23,17 @@ class ParserOptions:
     """Per-record-type options from the config (e.g. type30: {excp: true})."""
 
     values: dict[str, Any] = field(default_factory=dict)
+    base_dir: Path | None = None  # relative paths in the options resolve against it
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.values.get(key, default)
+
+    def path(self, key: str) -> Path | None:
+        value = self.values.get(key)
+        if not value:
+            return None
+        p = Path(value).expanduser()
+        return p if p.is_absolute() or self.base_dir is None else self.base_dir / p
 
 
 class RecordParser(ABC):
@@ -56,6 +65,6 @@ def register(cls: type[RecordParser]) -> type[RecordParser]:
 
 def supported_types() -> dict[int, type[RecordParser]]:
     # Importing the record modules registers their parsers.
-    from .records import type14, type30  # noqa: F401
+    from .records import type14, type30, type110  # noqa: F401
 
     return dict(_REGISTRY)

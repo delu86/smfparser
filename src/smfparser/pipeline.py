@@ -49,7 +49,7 @@ class Pipeline:
     def __init__(self, config: Config, writers: list[Writer] | None = None) -> None:
         self.config = config
         self.parsers: dict[int, RecordParser] = {
-            rtype: cls(ParserOptions(config.record_options.get(rtype, {})))
+            rtype: cls(ParserOptions(config.record_options.get(rtype, {}), config.base_dir))
             for rtype, cls in supported_types().items()
         }
         self.schemas: dict[str, dict[str, str]] = {}

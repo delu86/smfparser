@@ -17,10 +17,6 @@ log = logging.getLogger(__name__)
 
 IF_EXISTS = ("append", "replace", "fail")
 
-# Bind-parameter limits per statement (SQLite >= 3.32: 32766; MySQL/MariaDB: 65535).
-MAX_PARAMS = {"sqlite": 32_766, "mysql": 65_535}
-DEFAULT_MAX_PARAMS = 30_000
-
 
 def database_url(ttype: str, options: dict[str, Any], resolve) -> sa.URL | str:
     if ttype == "sqlite":
@@ -59,16 +55,14 @@ class SqlWriter(Writer):
     def write(self, table: str, df: pd.DataFrame) -> None:
         first = table not in self._started
         self._started.add(table)
-        # Multi-row INSERTs bind rows x columns parameters; stay under the driver limit.
-        max_params = MAX_PARAMS.get(self.engine.dialect.name, DEFAULT_MAX_PARAMS)
-        batch = max(1, min(int(self.options.get("batch_rows", 1000)), max_params // max(1, len(df.columns))))
+        # Plain executemany: SQLAlchemy's multi-row VALUES statements are very slow to build for wide
+        # tables (smf110_1 has ~450 columns), and PyMySQL already batches executemany INSERTs.
         df.to_sql(
             self.prefix + table,
             self.engine,
             if_exists=self.if_exists if first else "append",
             index=False,
-            chunksize=batch,
-            method="multi",
+            chunksize=max(1, int(self.options.get("batch_rows", 1000))),
             dtype=self._column_types(df),
         )
 

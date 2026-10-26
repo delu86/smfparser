@@ -119,7 +119,24 @@ Options for each record type, keyed by type number.
 | Type | Key | Default | Meaning |
 |---|---|---|---|
 | 30 | `excp` | `false` | Also write `smf30_excp`, one row per DD from the EXCP section. This table can be very large: about 75 rows per type 30 record in typical batch workloads. |
+| 110 | `dictionary` | none | Path (relative to the config file) of an SMF file holding the CICS monitoring dictionary record (subtype 1, class 1). Required for type 110: without it the records are skipped with a warning. See [CICS dictionary](#cics-dictionary-type-110) below. |
+| 110 | `local_time` | `true` | Convert CICS timestamps (`start_005`, `stop_006`, …), which are UTC, to the local time recorded with each record, so they line up with `smf_datetime`. |
+| 110 | `hex` | `[]` | Informal names of extra character fields to write as hex instead of text, e.g. `[RRMSURID]`. |
 | 14, 15 | `ucb` | `false` | Also write `smf14_ucb` / `smf15_ucb`, one row per volume (device number, volser, EXCP count, tracks allocated). Most data sets use one volume; `smf14`/`smf15` already carry the totals and the volser list. |
+
+#### CICS dictionary (type 110)
+
+CICS performance records carry no field names, only a list of field connectors. Their layout is
+described by a separate *dictionary* record that CICS writes when monitoring starts, and the MCT can
+exclude fields, so the layout can vary between regions. smfparser reads one dictionary from the file
+given in `records: {110: {dictionary: …}}` and applies it to every region. The file can be an SMF dump that
+contains the dictionary record, or a dataset holding just that record. Like other SMF input, it must be
+transferred in binary with the RDWs kept.
+
+Each performance record's connector list is compared with the dictionary. A record from a region
+whose MCT records a different set of fields is not parsed: it is counted under `failed` and logged as
+`field connectors differ from the dictionary`. The `smf110_1` columns are listed in the
+[SMF type 110 field reference](smf110-fields.md), which you can regenerate for your own dictionary.
 
 ### `output`
 
@@ -169,7 +186,7 @@ subtype for a day. Use CSV or a database for bulk data.
 | `url` | sql | required | Any SQLAlchemy URL, e.g. `postgresql+psycopg://user:pw@host/db`. |
 | `if_exists` | all | `append` | What to do when a table already exists at the start of the run: `append`, `replace` (drop and recreate) or `fail`. |
 | `table_prefix` | all | `""` | Prefix added to every table name, e.g. `raw_`. |
-| `batch_rows` | all | `1000` | Rows per INSERT statement. It is capped automatically to stay under the driver's bind-parameter limit. |
+| `batch_rows` | all | `1000` | Rows passed to the driver per `executemany` call. |
 | `views` | all | `true` | Create the views at the end of the run: [`steps`, `jobs` and `intervals`](smf30-views.md) (type 30) and [`datasets`](smf14-fields.md#the-datasets-view) (types 14/15). |
 
 The parser creates tables from the DataFrame types:
@@ -197,17 +214,18 @@ No indexes are created. Add your own, for example on `(smf30jbn, smf30jnm)` or `
 | `smf14`, `smf15` | One row per non-VSAM data set close or end of volume: type 14 for input, type 15 for output. Both tables have the same columns. |
 | `smf14_ucb`, `smf15_ucb` | One row per volume (only with `records: {14: {ucb: true}}` / `{15: …}`). |
 | `datasets` | View over `smf14` and `smf15` (database outputs only). See [SMF types 14/15](smf14-fields.md#the-datasets-view). |
+| `smf110_1` | One row per CICS transaction, from type 110 subtype 1 performance (class 3) records. Columns depend on the CICS dictionary. See the [SMF type 110 field reference](smf110-fields.md). |
 
 Every row starts with the common columns `source_file`, `record_offset`, `smf_datetime`,
 `smf_type`, `smf_subtype`, `smf_sid`, `smf_ssi` and `smf_flag`. The record's own fields follow. Type 30
 tables end with `continuation`, which is true for the overflow records z/OS writes when a step has
 too many DDs for one record.
 They are listed with their meaning and units in the [SMF type 30 field reference](smf30-fields.md)
-and the [SMF types 14/15 field reference](smf14-fields.md).
+the [SMF types 14/15 field reference](smf14-fields.md) and the [SMF type 110 field reference](smf110-fields.md).
 
 Value conventions:
 - Text is decoded from EBCDIC, with trailing blanks removed.
-- CPU, I/O connect, queue and residency times are in seconds.
+- CPU, I/O connect, queue and residency times are in seconds. So are CICS clocks, whose start count is in a separate `_count` column.
 - A time of day and its date are combined into one datetime.
 - Missing sections or fields are empty (NULL).
 
@@ -255,6 +273,18 @@ FROM datasets
 WHERE jobname = 'MYJOB'
 GROUP BY stepname, ddname, dsname, smf_type, dsorg, recfm, disp
 ORDER BY closed;
+```
+
+Busiest CICS transactions, with average response time and CPU per transaction (`smf110_1`):
+
+```sql
+SELECT smfmnspn AS region, tran_001 AS tran, COUNT(*) AS n,
+       AVG(elapsed) AS avg_response_s, AVG(internal_response) AS avg_internal_s, AVG(usrcput_008) AS avg_cpu_s,
+       SUM(usrcput_008) AS total_cpu_s, SUM(db2reqct_180) AS db2_requests
+FROM smf110_1
+GROUP BY smfmnspn, tran_001
+ORDER BY total_cpu_s DESC
+LIMIT 20;
 ```
 
 ## Troubleshooting

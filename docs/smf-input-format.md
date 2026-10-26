@@ -87,6 +87,24 @@ offsets, then a variable number of UCB sections (count and length given in the f
 an *extended information segment* of sections that each start with their own length and type.
 See the [SMF types 14/15 field reference](smf14-fields.md).
 
+### SMF type 110 (CICS monitoring)
+
+A type 110 subtype 1 record has two triplets right after the header: one at offset 28 for the
+*product section* and one at 36 for the data section. The product section (114 bytes, at offset 44)
+identifies the region (`SMFMNPRN`/`SMFMNSPN` APPLIDs, job name, user ID) and the class of the data
+(offset +22: 1 dictionary, 3 performance, 4 exception, 5 transaction resource, 6 identity). Two more
+triplets follow it, at +24 for the list of 2-byte field connectors and at +32 for the data entries. At
++72 there is the local-time offset, in STCK units.
+
+- A **dictionary** (class 1) record holds 26-byte entries: owner (`DFHTASK`, …), type (`A` count, `C` text,
+  `T` STCK timestamp, `P` packed, `S` clock), id, length, connector, offset in the performance record
+  (`x'FFFF'` = excluded by the MCT) and informal name (`TRAN`, `USRCPUT`, …).
+- A **performance** (class 3) record holds the connector list, then several fixed-length performance
+  records, one per transaction (9 per SMF record and 3,364 bytes each in the sample). Each field's
+  position is the dictionary offset.
+
+A clock (`S`) is 12 bytes: an 8-byte STCK-format time (bit 51 = 1 µs), a flag byte and a 24-bit count.
+
 ## Data formats
 
 | Format | Encoding | How smfparser decodes it |

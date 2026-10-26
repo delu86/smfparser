@@ -196,3 +196,44 @@ def type14_record(
         segment = b"".join(extended)
         body += u(len(segment) + 2, 2) + segment
     return with_rdw(body)
+
+
+def cics_entry(owner: str, kind: str, ident: str, length: int, connector: int, offset: int, nickname: str) -> bytes:
+    """A 26-byte CICS monitoring dictionary entry (offset X'FFFF' = excluded)."""
+    return e(owner, 8) + e(kind, 1) + e(ident, 3) + u(length, 2) + u(connector, 2) + u(offset, 2) + e(nickname, 8)
+
+
+def cics_record(
+    cls: int,
+    data: bytes,
+    entry_length: int,
+    count: int,
+    connectors: list[int] | None = None,
+    applid: str = "CICSA001",
+    adjust_seconds: int = 3600,
+    d: date = date(2026, 10, 26),
+) -> bytes:
+    """A type 110 subtype 1 record (with RDW): monitoring class `cls` with `count` entries of
+    `entry_length` bytes (dictionary entries or performance records) after the connector list."""
+    connectors = connectors or []
+    hdr = header(110, 1, 4_020_000, d, ssi="CICS")  # 11:10:00
+    ps_offset = 4 + len(hdr) + 4 + 16  # triplet count + 2 triplets
+    product = bytearray(114)
+    product[0:2] = u(0x0730, 2)
+    product[2:10] = e(applid, 8)
+    product[10:18] = e(applid, 8)
+    product[22:24] = u(cls, 2)
+    conn_offset = ps_offset + len(product)
+    product[24:32] = u(conn_offset if connectors else 0, 4) + u(2 if connectors else 0, 2) + u(len(connectors), 2)
+    rec_offset = conn_offset + 2 * len(connectors)
+    product[32:40] = u(rec_offset, 4) + u(entry_length, 2) + u(count, 2)
+    product[72:80] = u(adjust_seconds * 1_000_000 << 12, 8)
+    product[82:90] = e("CICSJOB", 8)
+    product[90:94] = smf_date_bytes(d)
+    product[94:98] = u(360_000, 4)  # 01:00:00
+    product[98:106] = e("CICSUSR", 8)
+    product[106:114] = e("SP7.2.5", 8)
+    data_len = len(data) + 2 * len(connectors)
+    triplets = u(2, 2) + b"\0\0" + u(ps_offset, 4) + u(len(product), 2) + u(1, 2) + u(conn_offset, 4) + u(data_len, 2) + u(1, 2)
+    conns = b"".join(u(c, 2) for c in connectors)
+    return with_rdw(hdr + triplets + bytes(product) + conns + data)
