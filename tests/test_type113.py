@@ -1,5 +1,6 @@
 import csv
 import logging
+import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -9,8 +10,10 @@ from smfbuild import type113_record
 from test_type30 import epv_mismatches
 
 from smfparser.reader import read_records
-from smfparser.records.type113 import Type113Parser
+from smfparser.pipeline import to_frame
+from smfparser.records.type113 import GENERATIONS, Type113Parser
 from smfparser.registry import ParseContext, ParserOptions
+from smfparser.views import render
 
 CTX = ParseContext("test.smf", 99)
 
@@ -90,6 +93,54 @@ def test_other_subtypes_rejected():
         parse(bytes(rec))
 
 
+def view_rows(rows: list[dict], name: str) -> list[dict]:
+    """Rows of the named view, with `rows` loaded into an in-memory SQLite smf113_1."""
+    p = Type113Parser()
+    [view] = [v for v in p.views() if v.name == name]
+    with sqlite3.connect(":memory:") as conn:
+        to_frame(rows, p.schemas()["smf113_1"]).to_sql("smf113_1", conn, index=False)
+        conn.row_factory = sqlite3.Row
+        return [dict(r) for r in conn.execute(render(view, "sqlite"))]
+
+
+def z15_record(cpu: int, extended: dict[int, int]) -> dict:
+    counters = {1: [1_000, 400, 6, 0, 4, 0], 2: [0, 100], 4: [extended.get(128 + i, 0) for i in range(160)]}
+    [(_, row)] = parse(type113_record(cpu=cpu, counters=counters))
+    return row
+
+
+def test_cpu_metrics_view():
+    # 10 L1 misses (basic_2 + basic_4): 5 from L2, 2 from L3, 1 each from L4 local, L4 remote and memory.
+    row = z15_record(3, {133: 5, 144: 2, 147: 1, 153: 1, 145: 1})
+    [m] = view_rows([row], "cpu_metrics")
+    assert (m["system"], m["cpu_id"], m["cpu_type"], m["machine_type"], m["counter_version"]) == (
+        "SYSA", 3, "zIIP", "8561", 6)
+    assert m["cpi"] == pytest.approx(2.5) and m["prbstate"] == pytest.approx(25)
+    assert m["l1mp"] == pytest.approx(2.5)
+    assert (m["l2p"], m["l3p"], m["l4lp"], m["l4rp"], m["memp"]) == pytest.approx((50, 20, 10, 10, 10))
+    assert m["rni"] == pytest.approx(2.9 * (0.45 * 20 + 1.5 * 10 + 3.2 * 10 + 6.5 * 10) / 100)
+    assert m["lparcpu"] == pytest.approx(100 * 1000 / 5200e6 / 600)
+
+
+def test_cpu_type_metrics_view_sums_counters():
+    rows = [z15_record(3, {133: 10}), z15_record(4, {144: 10})]
+    [m] = view_rows(rows, "cpu_type_metrics")
+    assert (m["cpu_type"], m["cpus"], m["cycles"], m["instructions"]) == ("zIIP", 2, 2000, 800)
+    assert (m["l2p"], m["l3p"], m["cpi"]) == pytest.approx((50, 50, 2.5))
+
+
+def test_unknown_generation_has_no_sourcing():
+    row = z15_record(3, {133: 10}) | {"smf113_1_ctrversion2": 3}  # zEC12
+    [m] = view_rows([row], "cpu_metrics")
+    assert m["cpi"] == pytest.approx(2.5) and m["l2p"] is None and m["rni"] is None
+
+
+def test_generations_list_every_counter_once():
+    for gen in GENERATIONS.values():
+        counters = [n for group in gen[1:6] for n in group]
+        assert len(counters) == len(set(counters)) and all(128 <= n <= 287 for n in counters)
+
+
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLE = ROOT / "smf_files" / "xcsmfp02.smfaltro.d261026.t170005"
 EPV_DIR = ROOT / "smf_files" / "epv_files"  # EPV's export of the same dump
@@ -137,3 +188,15 @@ def test_sample_type113_epv(subtype):
             bad[col] = n
     assert bad == {}
     assert checked == len(names) - 1  # all but DumpTime
+
+
+@pytest.mark.skipif(not SAMPLE.exists(), reason="sample dump not available")
+def test_sample_l1_sourcing_adds_up():
+    """On the sample's z15, the L1 misses sourced from L2, L3, L4 and memory add up to all of them."""
+    p = Type113Parser()
+    rows = [row for rec, offset in read_records(SAMPLE) if rec[5] == 113 and rec[23] == 1
+            for _, row in p.parse(rec, ParseContext(str(SAMPLE), offset))]
+    for name in ("cpu_metrics", "cpu_type_metrics"):
+        for m in view_rows(rows, name):
+            assert m["l2p"] + m["l3p"] + m["l4lp"] + m["l4rp"] + m["memp"] == pytest.approx(100, abs=0.05)
+            assert 0.4 < m["rni"] < 2 and 1 < m["cpi"] < 3

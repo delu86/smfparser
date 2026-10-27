@@ -1,7 +1,8 @@
 """SQL views over the parsed tables, created by the database writers at the end of a run.
 
 A view selects the same (alias, expression) columns from each of its source tables and joins them
-with UNION ALL. Expressions are plain SQL, except `Elapsed`, which is rendered per dialect.
+with UNION ALL, optionally grouping the rows of each. Expressions are plain SQL, except `Elapsed`,
+which is rendered per dialect.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ class View:
     columns: tuple[tuple[str, Expr], ...]  # (alias, expression), in view column order
     where: str | None = None  # row filter applied to every source table
     join: str | None = None  # SQL after each source table; "{table}" stands for that table
+    group_by: str | None = None  # GROUP BY of every source table (columns then aggregate rows)
 
 
 def elapsed_sql(dialect: str, start: str, end: str) -> str | None:
@@ -56,6 +58,7 @@ def render(view: View, dialect: str, prefix: str = "") -> str:
         cols.append(f"{expr} AS {alias}")
     select = ",\n       ".join(cols)
     where = f"\nWHERE {view.where}" if view.where else ""
+    where += f"\nGROUP BY {view.group_by}" if view.group_by else ""
     parts = []
     for src in view.sources:
         table = prefix + src

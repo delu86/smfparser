@@ -188,7 +188,7 @@ subtype for a day. Use CSV or a database for bulk data.
 | `if_exists` | all | `append` | What to do when a table already exists at the start of the run: `append`, `replace` (drop and recreate) or `fail`. |
 | `table_prefix` | all | `""` | Prefix added to every table name, e.g. `raw_`. |
 | `batch_rows` | all | `1000` | Rows passed to the driver per `executemany` call. |
-| `views` | all | `true` | Create the views at the end of the run: [`steps`, `jobs` and `intervals`](smf30-views.md) (type 30) and [`datasets`](smf14-fields.md#the-datasets-view) (types 14/15). |
+| `views` | all | `true` | Create the views at the end of the run: [`steps`, `jobs` and `intervals`](smf30-views.md) (type 30) [`datasets`](smf14-fields.md#the-datasets-view) (types 14/15) and [`cpu_metrics`, `cpu_type_metrics`](smf113-fields.md#views-cpu_metrics-and-cpu_type_metrics) (type 113). |
 
 The parser creates tables from the DataFrame types:
 - integers become `BIGINT`;
@@ -218,6 +218,7 @@ No indexes are created. Add your own, for example on `(smf30jbn, smf30jnm)` or `
 | `smf110_1` | One row per CICS transaction, from type 110 subtype 1 performance (class 3) records. Columns depend on the CICS dictionary. See the [SMF type 110 field reference](smf110-fields.md). |
 | `smf113_1`, `smf113_2` | One row per CPU per HIS interval: hardware counter deltas (subtype 1) or absolute values (subtype 2). See the [SMF type 113 field reference](smf113-fields.md). |
 | `smf113_1_counters`, `smf113_2_counters` | One row per counter (only with `records: {113: {counters: true}}`). |
+| `cpu_metrics`, `cpu_type_metrics` | Views (database outputs only) over `smf113_1` with CPI, L1 miss sourcing and RNI, per CPU and per CPU type. See [SMF type 113 views](smf113-fields.md#views-cpu_metrics-and-cpu_type_metrics). |
 
 Every row starts with the common columns `source_file`, `record_offset`, `smf_datetime`,
 `smf_type`, `smf_subtype`, `smf_sid`, `smf_ssi` and `smf_flag`. The record's own fields follow. Type 30

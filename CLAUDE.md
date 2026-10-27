@@ -60,7 +60,8 @@ CICS dictionary, not from code).
   multi-row VALUES are too slow to build for wide tables; DATETIME(6) on MySQL/MariaDB).
 - `views.py` — SQL views (`View`, per-dialect `Elapsed`); a parser lists its views in `views()` and `SqlWriter.finish`
   recreates them after each run (type 30: `steps`, `jobs`, `intervals`, defined in `records/type30.py`;
-  types 14/15: `datasets`).
+  types 14/15: `datasets`; type 113: `cpu_metrics`, `cpu_type_metrics` with CPI/RNI per IBM's CPU MF formulas, per
+  machine generation in `type113.GENERATIONS`). `View.group_by` makes an aggregate view.
 - `config.py` — YAML → dataclasses; relative paths resolve against the config file's directory; `${VAR}` env
   substitution for secrets.
 

@@ -25,6 +25,7 @@ from ..decoders import QUARTER_HOUR, whole_quarters
 from ..layout import Field as F
 from ..layout import Section, occurrences, triplet
 from ..registry import ParseContext, RecordParser, register
+from ..views import View
 from .header import HEADER_SCHEMA, parse_header
 
 log = logging.getLogger(__name__)
@@ -115,6 +116,92 @@ COUNTER_ROW_SCHEMA = {
     "counter_value": "Int64",
 }
 
+# CPU MF metrics, from IBM's "CPU MF Formulas" (WSC, April 2025). The L1 miss sourcing counters
+# and the RNI weights depend on the machine generation, given by SMF113_1_CtrVersion2.
+# Generation -> (machine, extended counters for L2P, L3P, L4LP, L4RP, MEMP,
+# RNI = k * (a*L3P + b*L4LP + c*L4RP + d*MEMP) / 100 as (k, a, b, c, d)).
+Counters = tuple[int, ...]
+GENERATIONS: dict[int, tuple[str, Counters, Counters, Counters, Counters, Counters, tuple[float, ...]]] = {
+    4: ("z13", (133, 136), (144, 145, 162, 163), (146, 147, 148, 164, 165, 166),
+        (*range(149, 158), *range(167, 176)), (158, 159, 160, 161, 176, 177, 178, 179), (2.3, 0.4, 1.6, 3.5, 7.5)),
+    5: ("z14", (133, 136), (144, 146, 162, 164), (147, 149, 156, 165, 167, 174, 150, 152, 158, 168, 170),
+        (153, 155, 157, 171, 173, 175), (145, 148, 151, 154, 163, 166, 169, 172), (2.4, 0.4, 1.5, 3.2, 7.0)),
+    6: ("z15", (133, 136), (144, 146, 162, 164), (147, 149, 156, 165, 167, 174, 150, 152, 158, 168, 170),
+        (153, 155, 157, 171, 173, 175), (145, 148, 151, 154, 163, 166, 169, 172), (2.9, 0.45, 1.5, 3.2, 6.5)),
+    7: ("z16", (145, 146, 169, 170), (147, 149, 150, 151, 171, 173, 174, 175),
+        (148, 152, 153, 154, *range(160, 166), 172, 176, 177, 178), (155, 166, 167, 168, 179),
+        (156, 157, 158, 159, 180, 181, 182, 183), (4.1, 0.45, 1.3, 5.0, 6.1)),
+    8: ("z17", (145, 146, 169, 170), (147, 149, 150, 151, 171, 173, 174, 175),
+        (148, 152, 153, 154, *range(160, 166), 172, 176, 177, 178), (155, 166, 167, 168, 179),
+        (156, 157, 158, 159), (4.7, 0.45, 1.2, 4.5, 6.0)),
+}
+SOURCING = ("l2p", "l3p", "l4lp", "l4rp", "memp")
+
+
+def _metrics(agg: bool) -> tuple[tuple[str, str], ...]:
+    """(alias, SQL) of the CPU MF metrics, per row or (agg) over a group of rows."""
+    def c(col: str) -> str:
+        return f"SUM({col})" if agg else col
+
+    def per_100(num: str, den: str) -> str:
+        return f"100.0 * {num} / NULLIF({den}, 0)"
+
+    def by_generation(sql: dict[int, str]) -> str:
+        whens = " ".join(f"WHEN {g} THEN {e}" for g, e in sql.items())
+        return f"CASE smf113_1_ctrversion2 {whens} END"
+
+    l1_misses = f"{c('basic_2')} + {c('basic_4')}"
+    sourcing = {g: {name: per_100("(" + " + ".join(c(f"extended_{n}") for n in counters) + ")", l1_misses)
+                    for name, counters in zip(SOURCING, gen[1:6])} for g, gen in GENERATIONS.items()}
+    rni = {}
+    for g, gen in GENERATIONS.items():
+        k, *weights = gen[6]
+        terms = " + ".join(f"{w} * {sourcing[g][name]}" for w, name in zip(weights, SOURCING[1:]))
+        rni[g] = f"{k} * ({terms}) / 100"
+    busy = "1.0 * basic_0 / (smf113_1_cpuspeed * 1000000.0)"  # seconds the CPU was dispatched
+    return (
+        ("cpi", f"1.0 * {c('basic_0')} / NULLIF({c('basic_1')}, 0)"),
+        ("prbstate", per_100(c("problem_33"), c("basic_1"))),
+        ("l1mp", per_100(f"({l1_misses})", c("basic_1"))),
+        *((name, by_generation({g: s[name] for g, s in sourcing.items()})) for name in SOURCING),
+        ("rni", by_generation(rni)),
+        ("lparcpu", f"100.0 * {c(busy)} / NULLIF(duration_sec, 0)"),
+    )
+
+
+CPU_KEYS = (
+    ("system", "smf_sid"),
+    ("interval_start", "smf113intervalstart"),
+    ("interval_end", "smf113intervalend"),
+    ("duration_sec", "duration_sec"),
+)
+MACHINE = (
+    ("cpu_type", "cpu_type"),
+    ("machine_type", "smf113_1_machtype"),
+    ("machine_model", "smf113_1_machmodel"),
+    ("counter_version", "smf113_1_ctrversion2"),
+)
+VIEWS = (
+    View("cpu_metrics", ("smf113_1",), (
+        *CPU_KEYS,
+        ("cpu_id", "smf113_1_cpuid"),
+        ("core_id", "smf113_1_coreid"),
+        *MACHINE,
+        ("cpu_speed", "smf113_1_cpuspeed"),
+        ("cycles", "basic_0"),
+        ("instructions", "basic_1"),
+        *_metrics(agg=False),
+    )),
+    View("cpu_type_metrics", ("smf113_1",), (
+        *CPU_KEYS,
+        *MACHINE,
+        ("cpus", "COUNT(*)"),
+        ("cycles", "SUM(basic_0)"),
+        ("instructions", "SUM(basic_1)"),
+        *_metrics(agg=True),
+    ), group_by=", ".join(expr for _, expr in (*CPU_KEYS, *MACHINE))),
+)
+
 
 def counter_sets(rec: bytes, data: int, subtype: int) -> Iterator[tuple[int, list[int]]]:
     """(counter set type, counter values in slot order) for each counter set of the record."""
@@ -142,6 +229,9 @@ class Type113Parser(RecordParser):
         super().__init__(*args, **kwargs)
         self._utc_offsets: dict[str, timedelta] = {}  # system -> local time minus UTC, last seen
         self._warned_unmapped: set[tuple[int, int]] = set()
+
+    def views(self) -> tuple[View, ...]:
+        return VIEWS
 
     def _row_schema(self, subtype: int) -> dict[str, str]:
         schema = dict(HEADER_SCHEMA)

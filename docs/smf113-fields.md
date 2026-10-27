@@ -13,6 +13,7 @@ behaviour, and are the input for capacity planning metrics such as RNI.
 | 2 | `smf113_2` | One row per CPU per interval. **Absolute** counter values since the counters were enabled; basic, problem-state, crypto and extended sets only |
 | 1 | `smf113_1_counters` | One row per counter; only with `records: {113: {counters: true}}` |
 | 2 | `smf113_2_counters` | One row per counter; only with `records: {113: {counters: true}}` |
+| 1 | `cpu_metrics`, `cpu_type_metrics` | Views (database outputs only) with CPI, RNI and the other CPU MF metrics, see [Views](#views-cpu_metrics-and-cpu_type_metrics) |
 
 Column names are the IBM field names in lower case. The layout follows the z/OS 2.5 SMF manual and
 was checked against z/OS 2.5 records from a z15. Both subtypes were compared with EPV's decoding of
@@ -200,3 +201,59 @@ counter, including the z/OS set and counters past the counter columns. `source_f
 | `counter_index` | Int64 | Slot of the counter within its set, from 0 |
 | `counter_number` | Int64 | CPU-measurement facility counter number; empty for the z/OS set |
 | `counter_value` | Int64 | The counter: a delta (subtype 1) or an absolute value (subtype 2) |
+
+## Views: `cpu_metrics` and `cpu_type_metrics`
+
+Database outputs get two views over `smf113_1` with the metrics of IBM's *CPU MF Formulas* (IBM Z
+WSC Performance Team, April 2025):
+
+- `cpu_metrics`: one row per CPU per interval.
+- `cpu_type_metrics`: one row per system, interval and `cpu_type`. The counters of the CPUs are
+  summed before the ratios are taken, as IBM does, so a busy CPU weighs more than an idle one.
+  `cpus` is the number of CPUs, and `lparcpu` is their total (250 = two and a half CPUs busy).
+
+| View column | Meaning |
+|---|---|
+| `system`, `interval_start`, `interval_end`, `duration_sec` | `smf_sid`, `smf113intervalstart`, `smf113intervalend`, `duration_sec` |
+| `cpu_id`, `core_id`, `cpu_speed` | `smf113_1_cpuid`, `smf113_1_coreid`, `smf113_1_cpuspeed` (`cpu_metrics` only) |
+| `cpus` | Number of CPUs in the group (`cpu_type_metrics` only) |
+| `cpu_type`, `machine_type`, `machine_model`, `counter_version` | `cpu_type`, `smf113_1_machtype`, `smf113_1_machmodel`, `smf113_1_ctrversion2` |
+| `cycles`, `instructions` | Basic counters 0 and 1 (summed in `cpu_type_metrics`) |
+| `cpi` | Cycles per instruction: B0 / B1 |
+| `prbstate` | % of instructions in problem state: P33 / B1 × 100 |
+| `l1mp` | L1 misses per 100 instructions: (B2 + B4) / B1 × 100 |
+| `l2p`, `l3p`, `l4lp`, `l4rp`, `memp` | % of L1 misses sourced from L2, L3 (same chip), L4 local (same drawer), L4 remote (other drawer) and memory: extended counters / (B2 + B4) × 100. They add up to 100 |
+| `rni` | Relative nest intensity: k × (a·L3P + b·L4LP + c·L4RP + d·MEMP) / 100 |
+| `lparcpu` | % of the interval the CPU was dispatched: B0 / (CPU speed × 10⁶) / `duration_sec` × 100 |
+
+The sourcing counters and the RNI weights depend on the machine generation (`counter_version`):
+
+| `counter_version` | Machine | L2P | L3P | L4LP | L4RP | MEMP | RNI k, a, b, c, d |
+|---:|---|---|---|---|---|---|---|
+| 4 | z13 | E133+E136 | E144+E145+E162+E163 | E146+E147+E148+E164+E165+E166 | E149+E150+E151+E152+E153+E154+E155+E156+E157+E167+E168+E169+E170+E171+E172+E173+E174+E175 | E158+E159+E160+E161+E176+E177+E178+E179 | 2.3, 0.4, 1.6, 3.5, 7.5 |
+| 5 | z14 | E133+E136 | E144+E146+E162+E164 | E147+E149+E156+E165+E167+E174+E150+E152+E158+E168+E170 | E153+E155+E157+E171+E173+E175 | E145+E148+E151+E154+E163+E166+E169+E172 | 2.4, 0.4, 1.5, 3.2, 7.0 |
+| 6 | z15 | E133+E136 | E144+E146+E162+E164 | E147+E149+E156+E165+E167+E174+E150+E152+E158+E168+E170 | E153+E155+E157+E171+E173+E175 | E145+E148+E151+E154+E163+E166+E169+E172 | 2.9, 0.45, 1.5, 3.2, 6.5 |
+| 7 | z16 | E145+E146+E169+E170 | E147+E149+E150+E151+E171+E173+E174+E175 | E148+E152+E153+E154+E160+E161+E162+E163+E164+E165+E172+E176+E177+E178 | E155+E166+E167+E168+E179 | E156+E157+E158+E159+E180+E181+E182+E183 | 4.1, 0.45, 1.3, 5.0, 6.1 |
+| 8 | z17 | E145+E146+E169+E170 | E147+E149+E150+E151+E171+E173+E174+E175 | E148+E152+E153+E154+E160+E161+E162+E163+E164+E165+E172+E176+E177+E178 | E155+E166+E167+E168+E179 | E156+E157+E158+E159 | 4.7, 0.45, 1.2, 4.5, 6.0 |
+
+Older machines (zEC12 and before) use other formulas: their sourcing columns and `rni` are empty,
+while `cpi`, `prbstate`, `l1mp` and `lparcpu` are filled. A CPU without extended counters also
+gets empty sourcing columns. The z15 mapping was checked on the sample: the five percentages add up
+to 100 for every CPU.
+
+IBM's LSPR workload decision table uses `l1mp` and `rni`:
+
+| `l1mp` | `rni` | LSPR workload |
+|---|---|---|
+| < 3 | ≥ 0.75 / < 0.75 | AVERAGE / LOW |
+| 3 to 6 | > 1.0 / 0.6 to 1.0 / < 0.6 | HIGH / AVERAGE / LOW |
+| > 6 | ≥ 0.75 / < 0.75 | HIGH / AVERAGE |
+
+Example: hourly RNI of the general purpose CPs:
+
+```sql
+SELECT system, interval_end, cpus, cpi, l1mp, rni, lparcpu
+FROM cpu_type_metrics
+WHERE cpu_type = 'CP'
+ORDER BY system, interval_end;
+```

@@ -220,4 +220,6 @@ The script fails if a field has no description, so a new field can't be left und
 - Type 113: the counter columns cover basic 0–5, problem-state 32–37, crypto 64–83, extended 128–287
   (what a z15 records) and MT-diagnostic 448–463. Anything else is only in the `counters` tables.
   The extended counters are model dependent and are not named. Subtype 2 counters are written as
-  recorded (cumulative), not turned into deltas. No views or derived metrics (CPI, RNI) yet.
+  recorded (cumulative), not turned into deltas, and the `cpu_metrics` views cover only subtype 1 on
+  z13 through z17 (CPI, L1MP, PRBSTATE and LPARCPU work on any machine). No finite CPI, TLB or
+  AIU metrics yet.

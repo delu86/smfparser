@@ -8,7 +8,11 @@ records, keeps the record types and subtypes you choose, decodes them with panda
 
 Supported record types:
 - **14/15** (non-VSAM data set activity: one row per input/output data set close or end of volume);
-- **30** (common address space work: job, step and interval accounting, subtypes 1–6).
+- **30** (common address space work: job, step and interval accounting, subtypes 1–6);
+- **110** subtype 1 (CICS monitoring, performance class: one row per transaction, laid out by the
+  CICS dictionary);
+- **113** subtypes 1 and 2 (hardware capacity: CPU-measurement facility counters, one row per CPU
+  per interval).
 
 ## Features
 
@@ -16,10 +20,12 @@ Supported record types:
 - Decodes EBCDIC, packed-decimal dates, TOD clocks and CPU-time units into proper text,
   datetimes and seconds.
 - Writes one flat table per record type or subtype, with IBM field names as columns, plus optional
-  per-DD (type 30 EXCP) and per-volume (type 14/15 UCB) tables. Overflow (continuation) records are flagged in a `continuation` column.
+  per-DD (type 30 EXCP), per-volume (type 14/15 UCB) and per-counter (type 113) tables. Overflow (continuation) records are flagged in a `continuation` column.
 - In databases, creates the `steps`, `jobs` and `intervals` views. They show elapsed time and CP,
   zIIP and normalised CPU totals per step, job and interval. A `datasets` view lists every data
-  set opened, with job, step, DD name, DSORG/RECFM/DISP, volumes and EXCP count.
+  set opened, with job, step, DD name, DSORG/RECFM/DISP, volumes and EXCP count. The
+  `cpu_metrics` and `cpu_type_metrics` views give CPI, L1 miss sourcing and RNI (relative nest
+  intensity) per CPU and per CPU type, using IBM's CPU MF formulas for z13 to z17.
 - Uses a YAML config for filters, code page, output targets and database credentials (taken from
   environment variables).
 - Streams the input and writes in chunks, so large dumps don't need to fit in memory.
@@ -56,6 +62,8 @@ output:
 - [SMF type 30 field reference](docs/smf30-fields.md): every output column with offset, units and meaning
 - [SMF type 30 views](docs/smf30-views.md): the `steps`, `jobs` and `intervals` views, and their CPU formulas
 - [SMF types 14/15 field reference](docs/smf14-fields.md): data set activity columns and the `datasets` view
+- [SMF type 110 field reference](docs/smf110-fields.md): CICS transaction columns, built from the CICS dictionary
+- [SMF type 113 field reference](docs/smf113-fields.md): hardware counter columns and the CPI/RNI views
 - [Developer guide](docs/developer-guide.md): architecture, adding record types or output formats, tests
 
 ## Development

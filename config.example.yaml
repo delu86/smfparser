@@ -45,7 +45,7 @@ output:
     - type: sqlite
       path: out/smf.db
       if_exists: replace    # append | replace | fail
-      views: true           # (re)create the steps/jobs/intervals and datasets views
+      views: true           # (re)create the steps/jobs/intervals, datasets and cpu_metrics views
     # - type: mariadb
     #   host: localhost
     #   port: 3306
