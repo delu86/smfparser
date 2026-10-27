@@ -26,6 +26,7 @@ class View:
     sources: tuple[str, ...]  # tables, combined with UNION ALL
     columns: tuple[tuple[str, Expr], ...]  # (alias, expression), in view column order
     where: str | None = None  # row filter applied to every source table
+    join: str | None = None  # SQL after each source table; "{table}" stands for that table
 
 
 def elapsed_sql(dialect: str, start: str, end: str) -> str | None:
@@ -55,4 +56,9 @@ def render(view: View, dialect: str, prefix: str = "") -> str:
         cols.append(f"{expr} AS {alias}")
     select = ",\n       ".join(cols)
     where = f"\nWHERE {view.where}" if view.where else ""
-    return "\nUNION ALL\n".join(f"SELECT {select}\nFROM {prefix}{src}{where}" for src in view.sources)
+    parts = []
+    for src in view.sources:
+        table = prefix + src
+        join = "\n" + view.join.replace("{table}", table) if view.join else ""
+        parts.append(f"SELECT {select}\nFROM {table}{join}{where}")
+    return "\nUNION ALL\n".join(parts)

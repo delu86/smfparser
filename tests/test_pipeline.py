@@ -86,6 +86,7 @@ def test_views(tmp_path, smf_file):
     assert list(steps.columns) == [
         "system", "jobname", "stepname", "jobnumber", "stepnumber", "start_time", "end_time",
         "elapsed_sec", "cp_cpu_sec", "ziip_cpu_sec", "potential_cp_cpu_sec",
+        "diskio_blk", "diskio_time", "tapeio_blk", "tapeio_time",
     ]
     job2 = steps[steps["jobname"] == "JOB2"].iloc[0]
     assert (job2["system"], job2["stepname"], job2["jobnumber"], job2["stepnumber"]) == ("SYSA", "STEP1", "JOB00042", 1)
@@ -94,11 +95,22 @@ def test_views(tmp_path, smf_file):
     assert job2["ziip_cpu_sec"] == pytest.approx(2.0)
     assert job2["potential_cp_cpu_sec"] == pytest.approx(1.55 + 2.0 * 512 / 256)
     assert len(pd.read_sql("select * from jobs", engine)) == 1
-    # A continuation record (EXCP overflow) is left out of the views.
+    io = steps.set_index("jobname")[["diskio_blk", "diskio_time", "tapeio_blk", "tapeio_time"]]
+    assert list(io.loc["MYJOB"]) == pytest.approx([5, 10 * 128e-6, 0, 0])  # EXCP entries are DASD
+    assert io.loc["BIGJOB", "diskio_blk"] == sum(range(50))
+    assert list(io.loc["JOB2"]) == [0, 0, 0, 0]  # no EXCP section
+    # A continuation record (EXCP overflow) is left out of the views, but its device I/O is added
+    # to the step it continues (same identification fields).
     with engine.begin() as conn:
-        conn.execute(sa.text("insert into smf30_4 (smf30jbn, smf30sit, smf_datetime, continuation) "
-                             "values ('JOB2', '2026-10-09 10:00:00', '2026-10-09 10:00:01', 1)"))
-    assert len(pd.read_sql("select * from steps", engine)) == 3
+        conn.execute(sa.text(
+            "insert into smf30_4 (smf_sid, smf30jbn, smf30jnm, smf30rst, smf30stn, smf30sit, smf_datetime,"
+            " continuation, diskio_blk, diskio_time, tapeio_blk, tapeio_time)"
+            " select smf_sid, smf30jbn, smf30jnm, smf30rst, smf30stn, smf30sit, smf_datetime, 1, 7, 0.25, 3, 0.5"
+            " from smf30_4 where smf30jbn = 'JOB2'"))
+    steps = pd.read_sql("select * from steps", engine)
+    assert len(steps) == 3
+    assert list(steps.set_index("jobname").loc["JOB2", ["diskio_blk", "diskio_time", "tapeio_blk", "tapeio_time"]]) \
+        == [7, 0.25, 3, 0.5]
     # Subtypes 2/3 were filtered out: their tables are created empty so the view still works.
     intervals = pd.read_sql("select * from intervals", engine)
     assert intervals.empty and intervals.columns[1] == "subtype"

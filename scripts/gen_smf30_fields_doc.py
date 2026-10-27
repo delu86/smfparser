@@ -38,8 +38,8 @@ DESC = {
 "SMF30JPT": "JES input priority",
 "SMF30STD": "Date the initiator selected the step or job",
 "SMF30SIT": "Time the initiator selected the step or job",
-"SMF30AST": "Device allocation start time",
-"SMF30PPS": "Problem program start time",
+"SMF30AST": "Device allocation start time (null if zero: allocation never started)",
+"SMF30PPS": "Problem program start time (null if zero, e.g. a flushed step)",
 "SMF30RSD": "Date the reader recognised the JOB card",
 "SMF30RST": "Time the reader recognised the JOB card",
 "SMF30RED": "Date the reader reached the end of the JCL",
@@ -51,8 +51,8 @@ DESC = {
 "SMF30TSN": "Terminal symbolic name",
 "SMF30PSN": "Name of the step that invoked the procedure (blank if not in a procedure)",
 "SMF30CL8": "Job class, 8 characters",
-"SMF30ISS": "Interval start (subtypes 2, 3 and 6), from the TOD clock",
-"SMF30IET": "Interval end (subtypes 2, 3 and 6), from the TOD clock",
+"SMF30ISS": "Interval start (subtypes 2, 3 and 6), from the TOD clock, shifted from UTC to local time",
+"SMF30IET": "Interval end (subtypes 2, 3 and 6; step end in subtype 4), from the TOD clock, shifted from UTC to local time",
 "SMF30SSN": "Substep number (z/OS UNIX; zero otherwise)",
 "SMF30EXN": "z/OS UNIX program name (first 16 bytes)",
 "SMF30ASI": "Address space identifier (ASID)",
@@ -240,12 +240,12 @@ DESC = {
 "SMF30BLK": "Blocks transferred (EXCP count) for this DD",
 "SMF30BSZ": "Largest block size",
 "SMF30DCT": "Device connect time for this DD",
-"SMF30XBS": "Blocks transferred, 8-byte counter",
+"SMF30XBS": "Block size, 8-byte field (usually equal to SMF30BSZ; not a block count)",
 }
 
 UNITS = {"sec100": "seconds (stored in hundredths)", "sec128us": "seconds (stored in 128 µs units)",
          "sec1024us": "seconds (stored in 1.024 ms units)",
-         "time": "datetime", "date": "date", "tod": "datetime (TOD clock, UTC)", "char": "text (EBCDIC)",
+         "time": "datetime", "date": "date", "tod": "datetime (TOD clock, local time)", "char": "text (EBCDIC)",
          "uint": "integer", "sint": "integer", "packed": "integer"}
 TRIP = {t.TRIPLET_SUBSYSTEM:"SMF30SOF",t.TRIPLET_IDENT:"SMF30IOF",t.TRIPLET_IO:"SMF30UOF",t.TRIPLET_COMPLETION:"SMF30TOF",
         t.TRIPLET_PROCESSOR:"SMF30COF",t.TRIPLET_STORAGE:"SMF30ROF",t.TRIPLET_PERFORMANCE:"SMF30POF",t.TRIPLET_OPERATOR:"SMF30OOF",t.TRIPLET_EXCP:"SMF30EOF"}
@@ -298,13 +298,24 @@ o.append("| Column | Type | Description |\n|---|---|---|")
 for c,dt in HEADER_SCHEMA.items():
     o.append(f"| `{c}` | {dt} | {DESC[c]} |")
 o.append("\nThe accounting section, which is variable length, becomes one column, `smf30act`: the JOB/EXEC accounting fields joined with commas, as in JCL.\n")
+o.append("""Four columns add up the record's EXCP section by device class (`smf30dev`), whether or not
+`smf30_excp` is written. They are empty when the record has no EXCP entries.
+
+| Column | Type | Description |
+|---|---|---|
+| `diskio_blk` | integer | Sum of `smf30blk` over DASD entries (`X'20'`) |
+| `diskio_time` | seconds | Sum of `smf30dct` over DASD entries |
+| `tapeio_blk` | integer | Sum of `smf30blk` over tape entries (`X'80'`) |
+| `tapeio_time` | seconds | Sum of `smf30dct` over tape entries |
+""")
 o.append("""The last column, `continuation` (boolean), is derived by smfparser rather than taken from a field.
 When a record's repeating sections (usually EXCP, one entry per DD) don't fit in the 32 KB maximum
 record size, z/OS writes the overflow in extra records. These *continuation records* carry only the
 subsystem, identification and overflow sections, so their CPU, I/O and performance columns are empty.
 smfparser sets `continuation` to true for records of subtypes 2–6 that have no processor
 accounting section. It is always false in `smf30_1`, because job start records never have that
-section. The `steps`, `jobs` and `intervals` views leave continuation records out.
+section. The `steps`, `jobs` and `intervals` views leave continuation records out, but add their
+device I/O columns to the record they continue.
 """)
 for at,s in t.FLAT_SECTIONS:
     o.append(f"## {s.name.capitalize()} section ({TRIP[at]})\n")

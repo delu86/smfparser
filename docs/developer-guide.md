@@ -130,7 +130,8 @@ A parser lists its views in `RecordParser.views()`, alongside `schemas()`. A `vi
 - a name;
 - its source tables, combined with `UNION ALL`;
 - `(alias, expression)` columns;
-- an optional `where` filter, applied to every source table.
+- an optional `where` filter, applied to every source table;
+- an optional `join`, SQL placed after each source table, with `{table}` standing for that table.
 
 An expression is plain SQL, or `views.Elapsed(start, end)`. `views.render()` turns `Elapsed` into
 seconds using the right SQL for each dialect (SQLite, MySQL/MariaDB, PostgreSQL).
@@ -144,7 +145,8 @@ The type 30 views live in `records/type30.py`:
 - `_view_columns()` holds the shared columns;
 - `CP_CPU_SQL`, `ZIIP_CPU_SQL` and `POTENTIAL_CP_CPU_SQL` hold the CPU formulas;
 - `VIEWS` lists the views. All three use `NOT_CONTINUATION_SQL` as their `where` filter, to drop the
-  continuation records that `is_continuation()` flags in the `continuation` column.
+  continuation records that `is_continuation()` flags in the `continuation` column. Their `join`
+  (`_continuation_join()`) adds the continuations' device I/O, matched on `STEP_KEYS`.
 
 To add a column, add a pair to `_view_columns()`, keeping the SQL portable. Then update the column
 table in [smf30-views.md](smf30-views.md) and the column list asserted in

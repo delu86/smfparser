@@ -43,6 +43,8 @@ class Field:
     # For kind="time": a datetime field this time cannot precede; if it does, the time is
     # taken to be on the following day (e.g. allocation start after a midnight crossing).
     not_before: str | None = None
+    # For kind="time": zero means the event never happened (e.g. program start of a flushed step).
+    zero_null: bool = False
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -88,7 +90,7 @@ class Section:
             if f.kind != "time" or row[f.column] is None:
                 continue
             day = row[self._by_name[f.date].column]
-            if day is None:
+            if day is None or (f.zero_null and not row[f.column]):
                 row[f.column] = None
                 continue
             ts = datetime(day.year, day.month, day.day) + row[f.column]

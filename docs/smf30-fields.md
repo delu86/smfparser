@@ -45,13 +45,24 @@ z/OS 2.5 records (record version `05`).
 
 The accounting section, which is variable length, becomes one column, `smf30act`: the JOB/EXEC accounting fields joined with commas, as in JCL.
 
+Four columns add up the record's EXCP section by device class (`smf30dev`), whether or not
+`smf30_excp` is written. They are empty when the record has no EXCP entries.
+
+| Column | Type | Description |
+|---|---|---|
+| `diskio_blk` | integer | Sum of `smf30blk` over DASD entries (`X'20'`) |
+| `diskio_time` | seconds | Sum of `smf30dct` over DASD entries |
+| `tapeio_blk` | integer | Sum of `smf30blk` over tape entries (`X'80'`) |
+| `tapeio_time` | seconds | Sum of `smf30dct` over tape entries |
+
 The last column, `continuation` (boolean), is derived by smfparser rather than taken from a field.
 When a record's repeating sections (usually EXCP, one entry per DD) don't fit in the 32 KB maximum
 record size, z/OS writes the overflow in extra records. These *continuation records* carry only the
 subsystem, identification and overflow sections, so their CPU, I/O and performance columns are empty.
 smfparser sets `continuation` to true for records of subtypes 2–6 that have no processor
 accounting section. It is always false in `smf30_1`, because job start records never have that
-section. The `steps`, `jobs` and `intervals` views leave continuation records out.
+section. The `steps`, `jobs` and `intervals` views leave continuation records out, but add their
+device I/O columns to the record they continue.
 
 ## Subsystem section (SMF30SOF)
 
@@ -80,8 +91,8 @@ section. The `steps`, `jobs` and `intervals` views leave continuation records ou
 | `smf30jpt` | 46 | 2 | integer | JES input priority |
 | `smf30std` | 60 | 4 | date | Date the initiator selected the step or job |
 | `smf30sit` | 56 | 4 | datetime | Time the initiator selected the step or job |
-| `smf30ast` | 48 | 4 | datetime | Device allocation start time |
-| `smf30pps` | 52 | 4 | datetime | Problem program start time |
+| `smf30ast` | 48 | 4 | datetime | Device allocation start time (null if zero: allocation never started) |
+| `smf30pps` | 52 | 4 | datetime | Problem program start time (null if zero, e.g. a flushed step) |
 | `smf30rsd` | 68 | 4 | date | Date the reader recognised the JOB card |
 | `smf30rst` | 64 | 4 | datetime | Time the reader recognised the JOB card |
 | `smf30red` | 76 | 4 | date | Date the reader reached the end of the JCL |
@@ -93,8 +104,8 @@ section. The `steps`, `jobs` and `intervals` views leave continuation records ou
 | `smf30tsn` | 124 | 8 | text (EBCDIC) | Terminal symbolic name |
 | `smf30psn` | 132 | 8 | text (EBCDIC) | Name of the step that invoked the procedure (blank if not in a procedure) |
 | `smf30cl8` | 140 | 8 | text (EBCDIC) | Job class, 8 characters |
-| `smf30iss` | 148 | 8 | datetime (TOD clock, UTC) | Interval start (subtypes 2, 3 and 6), from the TOD clock |
-| `smf30iet` | 156 | 8 | datetime (TOD clock, UTC) | Interval end (subtypes 2, 3 and 6), from the TOD clock |
+| `smf30iss` | 148 | 8 | datetime (TOD clock, local time) | Interval start (subtypes 2, 3 and 6), from the TOD clock, shifted from UTC to local time |
+| `smf30iet` | 156 | 8 | datetime (TOD clock, local time) | Interval end (subtypes 2, 3 and 6; step end in subtype 4), from the TOD clock, shifted from UTC to local time |
 | `smf30ssn` | 164 | 4 | integer | Substep number (z/OS UNIX; zero otherwise) |
 | `smf30exn` | 168 | 16 | text (EBCDIC) | z/OS UNIX program name (first 16 bytes) |
 | `smf30asi` | 184 | 2 | integer | Address space identifier (ASID) |
@@ -314,4 +325,4 @@ One row per DD entry. Each row also carries `source_file`, `record_offset`, `smf
 | `smf30blk` | 12 | 4 | integer | Blocks transferred (EXCP count) for this DD |
 | `smf30bsz` | 16 | 2 | integer | Largest block size |
 | `smf30dct` | 18 | 4 | seconds (stored in 128 µs units) | Device connect time for this DD |
-| `smf30xbs` | 22 | 8 | integer | Blocks transferred, 8-byte counter |
+| `smf30xbs` | 22 | 8 | integer | Block size, 8-byte field (usually equal to SMF30BSZ; not a block count) |

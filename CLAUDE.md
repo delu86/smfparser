@@ -69,6 +69,10 @@ SMF30 offsets follow the z/OS 2.x mapping and were checked against the sample da
 converted to seconds. Most are in hundredths of a second. The promoted times (`SMF30CEP/CEPI/CRP`) and the
 queue/residency times (`SMF30TAT/RES/ETA/JQT/RQT/HQT/SQT`) are in 1.024 ms units (`sec1024us`). Units come from
 pacsys and the IBM SMF Explorer descriptions; the IBM SMF Explorer offsets are wrong, so don't use them.
+The TOD times SMF30ISS/IET are shifted from UTC to local time: the offset is SMF30IST − SMF30ISS (subtypes 2/3)
+or record time − SMF30IET (step end), else the system's last offset (subtype 2 records can be written ~30 min late).
+Zero SMF30AST/PPS (flushed steps) are null. `test_sample_type30_epv` checks every record of
+`smf_files/xcsmfp02.smfaltro.d261026.t170005` against EPV's export in `smf_files/epv_files/`.
 
 SMF14/15 follow the z/OS 2.5 SMF manual (PDF `ieag200_v2r5.pdf`, which has every record layout). In the extended
 sections the manual counts types 5, 6 and 7 from after the 4-byte descriptor and the others from its start;

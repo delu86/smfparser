@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 CP = "cp037"
 
@@ -20,6 +20,11 @@ def smf_date_bytes(d: date) -> bytes:
     century = 1 if d.year >= 2000 else 0
     digits = f"{century}{d.year % 100:02d}{d.timetuple().tm_yday:03d}"
     return bytes.fromhex(f"0{digits}F")
+
+
+def tod(ts: datetime) -> bytes:
+    """8-byte STCK value (bit 51 = 1 microsecond)."""
+    return u((ts - datetime(1900, 1, 1)) // timedelta(microseconds=1) << 12, 8)
 
 
 def header(rtype: int, subtype: int | None, hundredths: int, d: date, sid: str = "SYSA", ssi: str = "JES2") -> bytes:
@@ -59,6 +64,9 @@ def type30_record(
     ident_length: int = 250,
     d: date = date(2026, 10, 9),
     continuation: bool = False,  # only subsystem, identification and EXCP sections, as in an overflow record
+    program_start: int = 3_600_060,  # SMF30PPS, hundredths (0 for a flushed step)
+    interval_utc: tuple[datetime, datetime] | None = None,  # SMF30ISS, SMF30IET (TOD clock)
+    interval_start: datetime | None = None,  # SMF30IDT/SMF30IST (local)
 ) -> bytes:
     """A type 30 record (with RDW) holding subsystem, identification, completion, processor,
     performance, accounting and EXCP sections."""
@@ -74,7 +82,7 @@ def type30_record(
     ident[40:42] = u(1, 2)
     ident[42:43] = e("A", 1)
     ident[48:52] = u(3_600_050, 4)  # 10:00:00.50 allocation start
-    ident[52:56] = u(3_600_060, 4)
+    ident[52:56] = u(program_start, 4)
     ident[56:60] = u(3_600_000, 4)  # 10:00:00.00 initiator select
     ident[60:64] = smf_date_bytes(d)
     ident[64:68] = u(8_639_990, 4)  # reader start 23:59:59.90 the day before
@@ -83,6 +91,8 @@ def type30_record(
     ident[76:80] = smf_date_bytes(d)
     ident[80:100] = e("PROGRAMMER", 20)
     ident[140:148] = e("A", 8)
+    if interval_utc:
+        ident[148:164] = tod(interval_utc[0]) + tod(interval_utc[1])
     ident[186:250] = e("CORRELATOR", 64)
     ident = bytes(ident[:ident_length])
     completion = u(0, 2) + u(0, 2) + u(0, 4)
@@ -92,6 +102,9 @@ def type30_record(
     processor[8:12] = u(cpu_srb, 4)
     processor[116:120] = u(ziip, 4)
     processor[40:44] = bytes.fromhex("0000000F")  # zero packed date (no interval start)
+    if interval_start:
+        midnight = datetime(interval_start.year, interval_start.month, interval_start.day)
+        processor[36:44] = u((interval_start - midnight) // timedelta(milliseconds=10), 4) + smf_date_bytes(interval_start)
     processor[178:186] = e("IEFBR14", 8)
     processor = bytes(processor)
     performance = bytearray(211)

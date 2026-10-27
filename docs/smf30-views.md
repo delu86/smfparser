@@ -12,7 +12,7 @@ charts and dashboards.
 | `intervals` | `smf30_2` UNION ALL `smf30_3` | interval of long-running work (started tasks, TSO users, long jobs) |
 
 Continuation records are left out of all three views (see [Caveats](#caveats)), so each row is one
-step, job or interval.
+step, job or interval. Their device I/O is added to the row they continue.
 
 ## How the views are created
 
@@ -47,6 +47,10 @@ All three views have the same columns. `intervals` has one extra column, `subtyp
 | `cp_cpu_sec` | number | CPU seconds on standard processors (CPs) |
 | `ziip_cpu_sec` | number | CPU seconds on zIIPs |
 | `potential_cp_cpu_sec` | number | CPU seconds this work would have used if it had all run on CPs |
+| `diskio_blk` | integer | Blocks transferred to and from DASD (EXCP entries with device class `X'20'`) |
+| `diskio_time` | number | DASD connect seconds of those entries |
+| `tapeio_blk` | integer | Blocks transferred to and from tape (device class `X'80'`) |
+| `tapeio_time` | number | Tape connect seconds of those entries |
 
 ### Start and end times
 
@@ -155,6 +159,20 @@ WHERE jobnumber = 'JOB56950'
 ORDER BY stepnumber;
 ```
 
+### Device I/O
+
+`diskio_blk`, `diskio_time`, `tapeio_blk` and `tapeio_time` add up the EXCP section, one entry per
+DD (`smf30blk` blocks, `smf30dct` connect time), split by device class `smf30dev`. They match EPV's
+`DISKIO`, `DISKIOTM`, `TAPEIO` and `TAPEIOTM`. The parser computes them for every record, so they are
+also columns of the `smf30_*` tables, and they don't need `excp: true`.
+
+A view row also includes the device I/O of its continuation records. A continuation is matched to its
+record on `system`, `jobnumber`, reader start (`smf30rst`), `stepnumber` and `start_time`
+(`smf30sit`), plus the interval end (`smf30iet`) in `intervals`.
+
+Entries for other device classes (e.g. `X'00'` for DDs with no device, such as spool or DUMMY) are not
+counted. Their sum is not `smf30tep`, which also counts I/O not attributed to any DD.
+
 ## Caveats
 
 - **Continuation records are filtered out:** an SMF record holds at most about 32 KB. When a step
@@ -163,7 +181,8 @@ ORDER BY stepnumber;
   no service data. The parser marks them with `continuation = true` in every output (see the
   [field reference](smf30-fields.md#common-header-columns)). The tables keep them (with
   `excp: true` they hold the remaining DDs), but every view adds `WHERE NOT continuation` so each
-  step, job or interval appears once. In the sample dump, this removes 14 step, 47 job and
+  step, job or interval appears once. Their device I/O is added to the row they continue
+  (see [Device I/O](#device-io)); every other column comes from the first record only. In the sample dump, this removes 14 step, 47 job and
   17 interval rows. To look at them, query the tables, e.g.
   `SELECT * FROM smf30_4 WHERE continuation`.
 - **Duplicates:** if you load the same dump twice with `if_exists: append`, its rows appear twice in

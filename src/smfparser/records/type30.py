@@ -11,6 +11,7 @@ Subtypes: 1 job start, 2 interval, 3 last interval, 4 step end, 5 job end,
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
 
 from .. import decoders as d
@@ -56,8 +57,8 @@ IDENT = Section("identification", (
     F("SMF30JPT", 46, 2),
     F("SMF30STD", 60, 4, "date"),
     F("SMF30SIT", 56, 4, "time", date="SMF30STD"),
-    F("SMF30AST", 48, 4, "time", date="SMF30STD", not_before="SMF30SIT"),
-    F("SMF30PPS", 52, 4, "time", date="SMF30STD", not_before="SMF30SIT"),
+    F("SMF30AST", 48, 4, "time", date="SMF30STD", not_before="SMF30SIT", zero_null=True),
+    F("SMF30PPS", 52, 4, "time", date="SMF30STD", not_before="SMF30SIT", zero_null=True),
     F("SMF30RSD", 68, 4, "date"),
     F("SMF30RST", 64, 4, "time", date="SMF30RSD"),
     F("SMF30RED", 76, 4, "date"),
@@ -291,10 +292,22 @@ FLAT_SECTIONS: tuple[tuple[int, Section], ...] = (
 )
 
 ACCOUNTING_SCHEMA = {"smf30act": "string"}
+# Blocks (SMF30BLK) and connect seconds (SMF30DCT) of this record's EXCP entries, by device class (SMF30DEV).
+DEVICE_IO_SCHEMA = {"diskio_blk": "Int64", "diskio_time": "Float64", "tapeio_blk": "Int64", "tapeio_time": "Float64"}
+DEVICE_CLASSES = {0x20: "diskio", 0x80: "tapeio"}  # DASD, tape
 CONTINUATION_SCHEMA = {"continuation": "boolean"}
 
 # Identification columns copied into each EXCP row to make it usable on its own.
 EXCP_KEY_COLUMNS = ("smf30jbn", "smf30jnm", "smf30stm", "smf30stn", "smf30pgm", "continuation")
+
+
+QUARTER_HOUR = timedelta(minutes=15)  # every UTC offset is a whole number of quarter hours
+
+
+def whole_quarters(delta: timedelta) -> timedelta | None:
+    """`delta` rounded to quarter hours, if it is within a second of one."""
+    q = round(delta / QUARTER_HOUR) * QUARTER_HOUR
+    return q if abs(delta - q) < timedelta(seconds=1) else None
 
 
 def is_continuation(rec: bytes, subtype: int) -> bool:
@@ -302,6 +315,25 @@ def is_continuation(rec: bytes, subtype: int) -> bool:
     32 KB: they carry only the subsystem, identification and overflow sections. Subtype 1 never
     has a processor section, so it can't be told apart this way and is never flagged."""
     return subtype != 1 and triplet(rec, TRIPLET_PROCESSOR).count == 0
+
+
+def device_io(rec: bytes) -> dict[str, Any]:
+    """DEVICE_IO_SCHEMA totals from the EXCP section; None if the record has no EXCP entries."""
+    t = triplet(rec, TRIPLET_EXCP)
+    if t.count == 0 or t.length < 22:
+        return dict.fromkeys(DEVICE_IO_SCHEMA)
+    blocks = dict.fromkeys(DEVICE_CLASSES.values(), 0)
+    connect = dict.fromkeys(DEVICE_CLASSES.values(), 0)  # 128-microsecond units
+    for start in occurrences(rec, t):
+        kind = DEVICE_CLASSES.get(rec[start])
+        if kind:
+            blocks[kind] += d.uint(rec[start + 12 : start + 16])
+            connect[kind] += d.uint(rec[start + 18 : start + 22])
+    out: dict[str, Any] = {}
+    for kind in DEVICE_CLASSES.values():
+        out[f"{kind}_blk"] = blocks[kind]
+        out[f"{kind}_time"] = connect[kind] * 128e-6
+    return out
 
 
 def decode_accounting(rec: bytes, codepage: str) -> str | None:
@@ -351,24 +383,39 @@ def _view_columns(start: str, *extra: tuple[str, Expr]) -> tuple[tuple[str, Expr
         ("cp_cpu_sec", CP_CPU_SQL),
         ("ziip_cpu_sec", ZIIP_CPU_SQL),
         ("potential_cp_cpu_sec", POTENTIAL_CP_CPU_SQL),
+        *((c, f"COALESCE({c}, 0) + COALESCE(cont_{c}, 0)") for c in DEVICE_IO_SCHEMA),
     )
 
 
+def _continuation_join(*keys: str) -> str:
+    """Joins each row to the device I/O totals of its continuation records, which repeat the
+    identification section of the record they continue."""
+    cols = ", ".join([f"{k} AS cont_{k}" for k in keys] + [f"SUM({c}) AS cont_{c}" for c in DEVICE_IO_SCHEMA])
+    on = " AND ".join(f"cont.cont_{k} = {{table}}.{k}" for k in keys)
+    return f"LEFT JOIN (SELECT {cols} FROM {{table}} WHERE continuation GROUP BY {', '.join(keys)}) cont ON {on}"
+
+
 # A step with too many DDs for one record is written as several records; the continuation records
-# carry only the subsystem, identification and EXCP sections. The views keep the first record only.
+# carry only the subsystem, identification and EXCP sections. The views keep the first record only,
+# adding the device I/O of its continuations.
 NOT_CONTINUATION_SQL = "NOT continuation"
+STEP_KEYS = ("smf_sid", "smf30jnm", "smf30rst", "smf30stn", "smf30sit")
 
 VIEWS = (
-    View("steps", ("smf30_4",), _view_columns("smf30sit"), NOT_CONTINUATION_SQL),
-    View("jobs", ("smf30_5",), _view_columns("smf30sit"), NOT_CONTINUATION_SQL),
+    View("steps", ("smf30_4",), _view_columns("smf30sit"), NOT_CONTINUATION_SQL, _continuation_join(*STEP_KEYS)),
+    View("jobs", ("smf30_5",), _view_columns("smf30sit"), NOT_CONTINUATION_SQL, _continuation_join(*STEP_KEYS)),
     View("intervals", ("smf30_2", "smf30_3"), _view_columns("smf30ist", ("subtype", "smf_subtype")),
-         NOT_CONTINUATION_SQL),
+         NOT_CONTINUATION_SQL, _continuation_join(*STEP_KEYS, "smf30iet")),
 )
 
 
 @register
 class Type30Parser(RecordParser):
     record_type = 30
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._utc_offsets: dict[str, timedelta] = {}  # system -> local time minus UTC, last seen
 
     def table_name(self, subtype: int) -> str:
         return f"smf30_{subtype}"
@@ -381,6 +428,7 @@ class Type30Parser(RecordParser):
         for _, section in FLAT_SECTIONS:
             schema.update(section.schema())
         schema.update(ACCOUNTING_SCHEMA)
+        schema.update(DEVICE_IO_SCHEMA)
         schema.update(CONTINUATION_SCHEMA)
         return schema
 
@@ -405,7 +453,13 @@ class Type30Parser(RecordParser):
             start = next(occurrences(rec, t), None)
             row.update(section.empty() if start is None else section.decode(rec, start, t.length, ctx.codepage))
         row["smf30act"] = decode_accounting(rec, ctx.codepage)
+        row.update(device_io(rec))
         row["continuation"] = is_continuation(rec, subtype)
+        if row["smf30iss"] is not None or row["smf30iet"] is not None:
+            shift = self._utc_offset(row)
+            for c in ("smf30iss", "smf30iet"):
+                if row[c] is not None:
+                    row[c] += shift
         yield self.table_name(subtype), row
 
         if self.options.get("excp", False):
@@ -416,3 +470,22 @@ class Type30Parser(RecordParser):
                 excp["excp_index"] = i
                 excp.update(EXCP.decode(rec, start, t.length, ctx.codepage))
                 yield "smf30_excp", excp
+
+    def _utc_offset(self, row: dict[str, Any]) -> timedelta:
+        """Local time minus UTC, to shift the TOD-clock times SMF30ISS/SMF30IET to local time.
+
+        SMF30IST (local) and SMF30ISS (UTC) are the same instant; a step end record has no SMF30IST
+        but is written as the step ends (SMF30IET). Records with neither (continuations, interval
+        records written late) reuse the system's last offset; failing that, the gap between SMF30IET
+        and the record time is floored to quarter hours (right if the record is under 15 minutes late)."""
+        iss, iet, ist, written = row["smf30iss"], row["smf30iet"], row["smf30ist"], row["smf_datetime"]
+        offset = whole_quarters(ist - iss) if ist is not None and iss is not None else None
+        if offset is None and iet is not None and written is not None:
+            offset = whole_quarters(written - iet)
+        if offset is not None:
+            self._utc_offsets[row["smf_sid"]] = offset
+            return offset
+        known = self._utc_offsets.get(row["smf_sid"])
+        if known is not None or iet is None or written is None:
+            return known or timedelta(0)
+        return (written - iet + timedelta(seconds=1)) // QUARTER_HOUR * QUARTER_HOUR
