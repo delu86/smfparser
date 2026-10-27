@@ -7,12 +7,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Python parser for IBM z/OS SMF binary dumps. Reads the raw dataset (RECFM=VBS, transferred in
 binary with BDWs/RDWs kept), filters records by type/subtype per a YAML config, decodes them into
 pandas DataFrames, and writes CSV, JSON, Excel, SQLite, MariaDB or any SQLAlchemy URL.
-Currently supported: SMF types 14/15, 30 (subtypes 1-6) and 110 subtype 1 (CICS performance, class 3). Sample dumps live in `smf_files/` (git-ignored).
+Currently supported: SMF types 14/15, 30 (subtypes 1-6), 110 subtype 1 (CICS performance, class 3) and
+113 subtypes 1/2 (HIS hardware counters). Sample dumps live in `smf_files/` (git-ignored).
 Documentation lives in `docs/` (user guide, input format, generated SMF30, SMF14/15 and SMF110 field references,
-SMF30 views, developer guide). After changing `records/type30.py`, `records/type14.py` or `records/type110.py`,
-regenerate the field reference with
+SMF30 views, developer guide). After changing `records/type30.py`, `records/type14.py`, `records/type113.py` or
+`records/type110.py`, regenerate the field reference with
 `.venv/bin/python scripts/gen_smf30_fields_doc.py docs/smf30-fields.md` /
 `.venv/bin/python scripts/gen_smf14_fields_doc.py docs/smf14-fields.md` /
+`.venv/bin/python scripts/gen_smf113_fields_doc.py docs/smf113-fields.md` /
 `.venv/bin/python scripts/gen_smf110_fields_doc.py smf_files/dictionary.bin docs/smf110-fields.md` (built from the
 CICS dictionary, not from code).
 
@@ -47,6 +49,11 @@ CICS dictionary, not from code).
   (`ParserOptions.path` resolves it against the config dir); phase 1 applies one dictionary to every region and
   rejects records whose connector list differs. Columns `<nickname>_<id>` (e.g. `usrcput_008`); clocks give seconds
   plus `_count`; STCK times shifted to local with the product-section offset; one precompiled `struct` per transaction.
+- `records/type113.py` — SMF 113 subtypes 1 (counter deltas) and 2 (absolute counters), tables `smf113_1`/`smf113_2`,
+  one row per CPU per interval. Counter columns `<set>_<number>` (`basic_0`, `extended_142`, …), number = set base
+  (basic 0, problem 32, crypto 64, extended 128, MT-diag 448) + slot; counters without a column only go to the
+  optional `smf113_N_counters` tables (`records: {113: {counters: true}}`). STCK times shifted to local with
+  record time − CTM.
 - `pipeline.py` — read → filter → parse → per-table buffers → DataFrames with fixed schema/dtypes every
   `chunk_rows` → all writers. A record that fails to parse is counted and logged, not fatal.
 - `writers/` — `files.py` (csv, json/jsonl, excel), `sql.py` (SQLAlchemy `to_sql` with plain executemany;
@@ -77,6 +84,11 @@ Zero SMF30AST/PPS (flushed steps) are null. `test_sample_type30_epv` checks ever
 SMF14/15 follow the z/OS 2.5 SMF manual (PDF `ieag200_v2r5.pdf`, which has every record layout). In the extended
 sections the manual counts types 5, 6 and 7 from after the 4-byte descriptor and the others from its start;
 `type14.py` counts every section from the start of its descriptor.
+
+SMF 113 follows the z/OS 2.5 SMF manual and matched the sample (z15, 8561). Subtype 2 counters are contiguous in
+counter-set order (SMF113_2_CSN per set); the reserved 8 bytes of each subtype 2 set descriptor hold a counter mask
+we ignore. `test_sample_type113_epv` checks both subtypes against EPV113_1/2_HDCap (EPV quirks: subtype 1 CPU ID in
+hex, subtype 2 DURTIME blank).
 
 SMF 110 has no IBM SMF-manual layout (it is in the CICS TS monitoring docs, mapping DFHSMFDS/DFHMNPDA). Product
 section offsets in `type110.py` were checked on the sample: class at +22, job name +82 (not +98, which is the region

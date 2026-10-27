@@ -1,0 +1,207 @@
+"""Regenerate docs/smf113-fields.md from the SMF 113 section definitions.
+
+Usage: .venv/bin/python scripts/gen_smf113_fields_doc.py docs/smf113-fields.md
+Fails if a field in records/type113.py has no description in DESC.
+"""
+
+import sys
+from smfparser.records import type113 as t
+from smfparser.records.header import HEADER_SCHEMA
+
+DESC = {
+# header
+"source_file": "Path of the dump file the record came from",
+"record_offset": "Byte offset in the file of the record's first segment (with `source_file`, a unique row key)",
+"smf_datetime": "Time and date the record was written (SMF113TME + SMF113DTE), local time: just after the end of the interval",
+"smf_type": "Record type (SMF113RTY): 113",
+"smf_subtype": "Record subtype (SMF113STY): 1 counter deltas, 2 absolute counters",
+"smf_sid": "System identifier (SMF113SID)",
+"smf_ssi": "Subsystem identifier (SMF113WID), `HIS`",
+"smf_flag": "Header flag byte (SM113FLG)",
+# subsystem
+"SMF113RVN": "Record version number",
+"SMF113PNM": "Product name (`HIS`)",
+"SMF113OSL": "MVS product level, e.g. `SP7.2.5`",
+# identification
+"SMF113JBN": "Job name of the HIS address space",
+"SMF113RSD": "Reader start date of the HIS address space",
+"SMF113RST": "Reader start time of the HIS address space",
+"SMF113STP": "Step name",
+"SMF113IntervalStart": "Interval start, shifted from UTC to local time",
+"SMF113IntervalEnd": "Interval end, shifted from UTC to local time",
+# subtype 1
+"SMF113_1_CTS": "Start of the hardware data collection run (HIS start), local time",
+"SMF113_1_CTM": "Time the counters were read for this record, local time",
+"SMF113_1_CpuId": "Logical processor ID the counters are for (0 is valid)",
+"SMF113_1_CpuProcClass": "Processor type: 0 CP, 2 zAAP, 4 zIIP (also in `cpu_type`)",
+"SMF113_1_CpuSpeed": "Processor speed, cycles per microsecond",
+"SMF113_1_MachType": "Machine type, e.g. `8561` (z15)",
+"SMF113_1_MachModel": "Machine model, e.g. `T01`",
+"SMF113_1_CtrVersion0": "z/OS counter set version",
+"SMF113_1_CtrVersion1": "Basic and problem-state counter set version (CFVN)",
+"SMF113_1_CtrVersion2": "Crypto, extended and MT-diagnostic counter set version (CSVN); identifies the machine generation whose extended counter definitions apply",
+"SMF113_1_Flags": "Flags: 0x8000 the hardware lost counter data during the interval, 0x4000 it lost MT counter data",
+"SMF113_1_MachSeqCode": "Machine sequence (serial) code",
+"SMF113_1_CoreId": "Core ID the counters are for (core counter sets are recorded from one CPU per core)",
+# subtype 2
+"SMF113_2_CTS": "Start of the hardware data collection run (HIS start), local time",
+"SMF113_2_CTM": "Time the counters were read for this record, local time",
+"SMF113_2_CpuProcClass": "Processor type: 0 CP, 2 zAAP, 4 zIIP (also in `cpu_type`)",
+"SMF113_2_CF": "Flags: 0x8000 first record of the run (initial values), 0x4000 intermediate, 0x2000 final, 0x1000 non-standard hardware, 0x0800 the hardware lost counter data",
+"SMF113_2_CTRVN1": "Basic and problem-state counter set version (CFVN)",
+"SMF113_2_CTRVN2": "Crypto and extended counter set version (CSVN)",
+"SMF113_2_CPSP": "Processor speed, cycles per microsecond",
+"SMF113_2_MachType": "Machine type, e.g. `8561` (z15)",
+"SMF113_2_MachModel": "Machine model, e.g. `T01`",
+"SMF113_2_CpuId": "Logical processor ID the counters are for (0 is valid)",
+"SMF113_2_MachSeqCode": "Machine sequence (serial) code",
+}
+
+DERIVED = {
+"cpu_type": "Processor type from SMF113_x_CpuProcClass: `CP`, `zAAP` or `zIIP`",
+"duration_sec": "Interval length in seconds: SMF113IntervalEnd − SMF113IntervalStart",
+}
+
+COUNTERS = {
+0: "Cycle count", 1: "Instruction count", 2: "L1 I-cache directory-write count",
+3: "L1 I-cache penalty cycle count", 4: "L1 D-cache directory-write count", 5: "L1 D-cache penalty cycle count",
+32: "Problem-state cycle count", 33: "Problem-state instruction count",
+34: "Problem-state L1 I-cache directory-write count", 35: "Problem-state L1 I-cache penalty cycle count",
+36: "Problem-state L1 D-cache directory-write count", 37: "Problem-state L1 D-cache penalty cycle count",
+448: "MT-diagnostic: cycles with one thread active", 449: "MT-diagnostic: cycles with two threads active",
+}
+for base, alg in ((64, "PRNG"), (68, "SHA"), (72, "DEA"), (76, "AES"), (80, "ECC")):
+    COUNTERS.update({base: f"{alg} function count", base + 1: f"{alg} cycle count",
+                     base + 2: f"{alg} blocked function count", base + 3: f"{alg} blocked cycle count"})
+
+UNITS = {"tod": "datetime", "time": "datetime", "date": "date", "char": "text (EBCDIC)", "uint": "integer"}
+
+missing = []
+
+
+def table(fields):
+    out = ["| Column | Offset | Len | Type | Description |", "|---|---:|---:|---|---|"]
+    for f in fields:
+        desc = DESC.get(f.name) or missing.append(f.name) or ""
+        out.append(f"| `{f.column}` | {f.offset} | {f.length} | {UNITS[f.kind]} | {desc} |")
+    return "\n".join(out)
+
+
+o = []
+o.append("""# SMF type 113 field reference
+
+<!-- Generated by scripts/gen_smf113_fields_doc.py from src/smfparser/records/type113.py. Do not edit by hand. -->
+
+SMF type 113 is written by HIS (hardware instrumentation services) with the CPU-measurement
+facility counters of each logical processor, once per collection interval (SMFINTVAL). The
+counters show how a processor spends its cycles, e.g. cycles per instruction (CPI) and cache
+behaviour, and are the input for capacity planning metrics such as RNI.
+
+| Subtype | Table | Contents |
+|---:|---|---|
+| 1 | `smf113_1` | One row per CPU per interval. Counter **deltas** since the previous record (IBM recommends this subtype) |
+| 2 | `smf113_2` | One row per CPU per interval. **Absolute** counter values since the counters were enabled; basic, problem-state, crypto and extended sets only |
+| 1 | `smf113_1_counters` | One row per counter; only with `records: {113: {counters: true}}` |
+| 2 | `smf113_2_counters` | One row per counter; only with `records: {113: {counters: true}}` |
+
+Column names are the IBM field names in lower case. The layout follows the z/OS 2.5 SMF manual and
+was checked against z/OS 2.5 records from a z15. Both subtypes were compared with EPV's decoding of
+the same dump (all EPV columns match).
+
+**Things to know**
+- The TOD-clock times (`smf113intervalstart`/`end`, `smf113_x_cts`/`ctm`) are UTC in the record.
+  They are shifted to local time, so they line up with `smf_datetime`. The offset is taken from
+  the record time minus SMF113_x_CTM, which are less than a second apart.
+- Subtype 2 counters are cumulative: subtract the previous record of the same CPU (and the same run,
+  `smf113_2_cts`) to get an interval's value. Subtype 1 already holds the deltas.
+- A counter that is empty (NULL) was not recorded. A zero counter was recorded but the event did not
+  happen (or isn't defined on this machine).
+
+## Common header columns
+""")
+o.append("| Column | Type | Description |\n|---|---|---|")
+for c, dt in HEADER_SCHEMA.items():
+    o.append(f"| `{c}` | {dt} | {DESC[c]} |")
+o.append("""
+## Subsystem section
+
+Located by the SMF113SOF triplet. Offsets are from the start of the section.
+""")
+o.append(table(t.SUBSYSTEM.fields) + "\n")
+o.append("## Identification section\n\nLocated by the SMF113IOF triplet.\n")
+o.append(table(t.IDENTIFICATION.fields) + "\n")
+o.append("""## Subtype 1 data section (`smf113_1` only)
+
+Located by the SMF113DOF triplet. The counter set triplet (SMF113_1_CSOF) is not written as columns.
+""")
+o.append(table(t.DATA_1.fields) + "\n")
+o.append("""## Subtype 2 data section (`smf113_2` only)
+
+Located by the SMF113DOF triplet. The counter set and counter triplets and the deprecated
+`SMF113_2_CPU#` are not written as columns.
+""")
+o.append(table(t.DATA_2.fields) + "\n")
+
+o.append("""## Counter columns
+
+Both tables have the same counter columns, named `<set>_<counter number>`. The counter number is the
+CPU-measurement facility number (first counter of each set + slot), so `basic_1` is counter 1 and
+`extended_128` is counter 128. Counters are 8-byte unsigned integers (subtype 1 can also record
+4-byte ones).
+
+| Set | Columns | Counter numbers | Subtype |
+|---|---|---|---|""")
+SETS = {"basic": "Basic", "problem": "Problem-state", "crypto": "Crypto-activity", "extended": "Extended",
+        "mtdiag": "MT-diagnostic"}
+for cs_type, (prefix, base, n) in t.COUNTER_SETS.items():
+    if base is None:
+        continue
+    sub = "1 only" if cs_type == 6 else "1, 2"
+    o.append(f"| {SETS[prefix]} ({cs_type}) | `{prefix}_{base}` … `{prefix}_{base + n - 1}` | {base}–{base + n - 1} | {sub} |")
+o.append("""
+The z/OS counter set (type 5) has no counter numbers and is only in the counters table. Counters past
+the columns above are only in the counters table too (a warning is logged once).
+
+The **extended** counters depend on the machine generation (`smf113_x_ctrversion2` / `ctrvn2`).
+Their meaning is listed per machine in IBM's *The CPU-Measurement Facility Extended Counters
+Definition for z10, z196/z114, zEC12/zBC12, z13/z13s, z14, z15 and z16* (SA23-2261).
+
+The others are architected:
+
+| Counter | Column | Meaning |
+|---:|---|---|""")
+for number, desc in COUNTERS.items():
+    prefix = next(p for p, base, n in t.COUNTER_SETS.values() if base is not None and base <= number < base + n)
+    o.append(f"| {number} | `{prefix}_{number}` | {desc} |")
+o.append("""
+For example, cycles per instruction (CPI) for each CPU and interval:
+
+```sql
+SELECT smf113intervalend, smf113_1_cpuid, cpu_type, 1.0 * basic_0 / basic_1 AS cpi
+FROM smf113_1
+ORDER BY smf113intervalend, smf113_1_cpuid;
+```
+""")
+o.append("## Derived columns\n\nComputed by smfparser; last in every row.\n")
+o.append("| Column | Type | Description |\n|---|---|---|")
+for c, dt in t.DERIVED_SCHEMA.items():
+    o.append(f"| `{c}` | {dt} | {DERIVED[c]} |")
+o.append(f"""
+## Counters tables: `smf113_1_counters`, `smf113_2_counters`
+
+One row per counter of each record, written only with the `counters` option. They hold every
+counter, including the z/OS set and counters past the counter columns. `source_file` +
+`record_offset` join back to `smf113_1` / `smf113_2`.
+
+| Column | Type | Description |
+|---|---|---|
+{chr(10).join(f"| `{c}` | {t.Type113Parser()._row_schema(1)[c]} | Copied from the record |" for c in t.COUNTER_KEY_COLUMNS)}
+| `cpu_id` | Int64 | SMF113_x_CpuId |
+| `counter_set` | string | `basic`, `problem`, `crypto`, `extended`, `zos` or `mtdiag` |
+| `counter_index` | Int64 | Slot of the counter within its set, from 0 |
+| `counter_number` | Int64 | CPU-measurement facility counter number; empty for the z/OS set |
+| `counter_value` | Int64 | The counter: a delta (subtype 1) or an absolute value (subtype 2) |
+""")
+if missing:
+    sys.exit(f"missing descriptions: {missing}")
+open(sys.argv[1], "w").write("\n".join(o))

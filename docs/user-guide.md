@@ -122,6 +122,7 @@ Options for each record type, keyed by type number.
 | 110 | `dictionary` | none | Path (relative to the config file) of an SMF file holding the CICS monitoring dictionary record (subtype 1, class 1). Required for type 110: without it the records are skipped with a warning. See [CICS dictionary](#cics-dictionary-type-110) below. |
 | 110 | `local_time` | `true` | Convert CICS timestamps (`start_005`, `stop_006`, …), which are UTC, to the local time recorded with each record, so they line up with `smf_datetime`. |
 | 110 | `hex` | `[]` | Informal names of extra character fields to write as hex instead of text, e.g. `[RRMSURID]`. |
+| 113 | `counters` | `false` | Also write `smf113_1_counters` / `smf113_2_counters`, one row per hardware counter. They hold every counter, including those without a column in `smf113_1`/`smf113_2` (the z/OS counter set, and extended counters past number 287). |
 | 14, 15 | `ucb` | `false` | Also write `smf14_ucb` / `smf15_ucb`, one row per volume (device number, volser, EXCP count, tracks allocated). Most data sets use one volume; `smf14`/`smf15` already carry the totals and the volser list. |
 
 #### CICS dictionary (type 110)
@@ -215,13 +216,16 @@ No indexes are created. Add your own, for example on `(smf30jbn, smf30jnm)` or `
 | `smf14_ucb`, `smf15_ucb` | One row per volume (only with `records: {14: {ucb: true}}` / `{15: …}`). |
 | `datasets` | View over `smf14` and `smf15` (database outputs only). See [SMF types 14/15](smf14-fields.md#the-datasets-view). |
 | `smf110_1` | One row per CICS transaction, from type 110 subtype 1 performance (class 3) records. Columns depend on the CICS dictionary. See the [SMF type 110 field reference](smf110-fields.md). |
+| `smf113_1`, `smf113_2` | One row per CPU per HIS interval: hardware counter deltas (subtype 1) or absolute values (subtype 2). See the [SMF type 113 field reference](smf113-fields.md). |
+| `smf113_1_counters`, `smf113_2_counters` | One row per counter (only with `records: {113: {counters: true}}`). |
 
 Every row starts with the common columns `source_file`, `record_offset`, `smf_datetime`,
 `smf_type`, `smf_subtype`, `smf_sid`, `smf_ssi` and `smf_flag`. The record's own fields follow. Type 30
 tables end with `continuation`, which is true for the overflow records z/OS writes when a step has
 too many DDs for one record.
 They are listed with their meaning and units in the [SMF type 30 field reference](smf30-fields.md)
-the [SMF types 14/15 field reference](smf14-fields.md) and the [SMF type 110 field reference](smf110-fields.md).
+the [SMF types 14/15 field reference](smf14-fields.md), the [SMF type 110 field reference](smf110-fields.md)
+and the [SMF type 113 field reference](smf113-fields.md).
 
 Value conventions:
 - Text is decoded from EBCDIC, with trailing blanks removed.

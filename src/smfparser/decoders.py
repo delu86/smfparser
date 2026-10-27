@@ -104,3 +104,12 @@ def stck(b: bytes) -> datetime | None:
     if value == 0:
         return None
     return TOD_EPOCH + timedelta(microseconds=value >> 12)
+
+
+QUARTER_HOUR = timedelta(minutes=15)  # every UTC offset is a whole number of quarter hours
+
+
+def whole_quarters(delta: timedelta) -> timedelta | None:
+    """`delta` rounded to quarter hours, if it is within a second of one."""
+    q = round(delta / QUARTER_HOUR) * QUARTER_HOUR
+    return q if abs(delta - q) < timedelta(seconds=1) else None

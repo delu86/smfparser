@@ -250,3 +250,51 @@ def cics_record(
     triplets = u(2, 2) + b"\0\0" + u(ps_offset, 4) + u(len(product), 2) + u(1, 2) + u(conn_offset, 4) + u(data_len, 2) + u(1, 2)
     conns = b"".join(u(c, 2) for c in connectors)
     return with_rdw(hdr + triplets + bytes(product) + conns + data)
+
+
+def type113_record(
+    subtype: int = 1,
+    cpu: int = 3,
+    proc_class: int = 4,  # zIIP
+    counters: dict[int, list[int]] | None = None,  # counter set type -> values in slot order
+    long_counters: bool = True,  # subtype 1: 8-byte (SMF113_1_LCR) or 4-byte (SMF113_1_SCR) counters
+    interval_end: datetime = datetime(2026, 10, 9, 9, 0),  # UTC
+    local_offset: timedelta = timedelta(hours=2),
+) -> bytes:
+    """A type 113 record (with RDW) for one CPU and a 10-minute interval ending at `interval_end`,
+    written at that time plus 0.05 s, local time."""
+    if counters is None:
+        counters = {1: [100, 50, 1, 2, 3, 4], 2: [40, 20], 3: list(range(20)), 4: [7] * 170}
+    written = interval_end + local_offset
+    hundredths = (written - datetime(written.year, written.month, written.day)) // timedelta(milliseconds=10) + 5
+    head = header(113, subtype, hundredths, written.date(), sid="SYSA", ssi="HIS")
+    subsystem = b"\x00\x00" + e("01", 2) + e("HIS", 8) + e("SP7.2.5", 8)
+    ident = (e("HIS", 8) + u(6_863_514, 4) + smf_date_bytes(date(2026, 10, 8)) + e("HIS", 8)
+             + tod(interval_end - timedelta(minutes=10)) + tod(interval_end) + bytes(8))
+    sub_at, ident_at, data_at = 52, 52 + len(subsystem), 52 + len(subsystem) + len(ident)
+    ctm = tod(interval_end + timedelta(microseconds=6359))
+    if subtype == 1:
+        cs_at = data_at + 78
+        width = 8 if long_counters else 4
+        pos = cs_at + 12 * len(counters)
+        sets = values = b""
+        for cs_type, vals in counters.items():
+            sets += u(cs_type, 2) + u(0x8000 if long_counters else 0, 2) + u(pos, 4) + u(width, 2) + u(len(vals), 2)
+            values += b"".join(u(v, width) for v in vals)
+            pos += width * len(vals)
+        data = (tod(datetime(2026, 10, 8, 17, 3, 55)) + ctm + u(cpu, 2) + bytes([proc_class, 0]) + u(5200, 4)
+                + e("8561", 4) + e("T01", 16) + u(1, 2) + u(3, 2) + u(6, 2) + u(0, 2)
+                + u(cs_at, 4) + u(12, 2) + u(len(counters), 2) + e("0000000000033A28", 16) + u(cpu // 2, 2))
+    else:
+        cs_at = data_at + 84
+        cd_at = cs_at + 12 * len(counters)
+        n = sum(len(v) for v in counters.values())
+        data = (tod(datetime(2026, 10, 8, 17, 3, 55)) + ctm + bytes([cpu, proc_class]) + u(0x4000, 2)
+                + u(3, 2) + u(6, 2) + u(cs_at, 4) + u(12, 2) + u(len(counters), 2) + u(cd_at, 4) + u(8, 2) + u(n, 2)
+                + u(5200, 4) + e("8561", 4) + e("T01", 16) + u(cpu, 2) + bytes(2) + e("0000000000033A28", 16))
+        sets = b"".join(bytes([cs_type, 0]) + u(len(vals), 2) + bytes(8) for cs_type, vals in counters.items())
+        values = b"".join(u(v, 8) for vals in counters.values() for v in vals)
+    data += sets + values
+    sdl = (u(sub_at, 4) + u(len(subsystem), 2) + u(1, 2) + u(ident_at, 4) + u(len(ident), 2) + u(1, 2)
+           + u(data_at, 4) + u(len(data), 2) + u(1, 2))
+    return with_rdw(head + bytes(2) + u(len(sdl), 2) + sdl + subsystem + ident + data)

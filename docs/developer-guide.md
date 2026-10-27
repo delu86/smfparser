@@ -175,6 +175,9 @@ target type in `config.TARGET_TYPES` (with its required key) and in `writers.cre
   compares every transaction with EPV's `EPV110_1_TrxAcct` (95 columns, about a minute). EPV quirks the test
   allows for: WMQGETWT/TSIOWTT/RMIMQM `…TM` columns hold the clock count, RSYSID is written as hex,
   INTRESPDUR is our `internal_response` (`elapsed − tciowtt_009`), and non-ASCII characters are blanked.
+- `test_sample_type113_epv` compares every type 113 record of `smf_files/xcsmfp02.smfaltro.d261026.t170005`
+  with EPV's `EPV113_1_HDCap` / `EPV113_2_HDCap` in `smf_files/epv_files/`. EPV quirks the test allows for:
+  the subtype 1 CPU ID is written in hex, and the subtype 2 `DURTIME` is blank.
 - MariaDB isn't tested automatically. To test it by hand, start a throwaway server:
   `docker run --rm -d -p 127.0.0.1:33306:3306 -e MARIADB_ROOT_PASSWORD=x -e MARIADB_DATABASE=smf mariadb:11`.
   Then run with a `mariadb` target on port 33306.
@@ -187,6 +190,7 @@ target type in `config.TARGET_TYPES` (with its required key) and in `writers.cre
 ```sh
 .venv/bin/python scripts/gen_smf30_fields_doc.py docs/smf30-fields.md
 .venv/bin/python scripts/gen_smf14_fields_doc.py docs/smf14-fields.md
+.venv/bin/python scripts/gen_smf113_fields_doc.py docs/smf113-fields.md
 .venv/bin/python scripts/gen_smf110_fields_doc.py smf_files/dictionary.bin docs/smf110-fields.md
 ```
 
@@ -213,3 +217,7 @@ The script fails if a field has no description, so a new field can't be left und
   resource (5) and identity (6) records, and the subtype 2 statistics, are skipped. Compressed
   performance records are not expanded (none occurred in the sample). One dictionary, from a file,
   applies to every region; in-stream dictionary records are ignored.
+- Type 113: the counter columns cover basic 0–5, problem-state 32–37, crypto 64–83, extended 128–287
+  (what a z15 records) and MT-diagnostic 448–463. Anything else is only in the `counters` tables.
+  The extended counters are model dependent and are not named. Subtype 2 counters are written as
+  recorded (cumulative), not turned into deltas. No views or derived metrics (CPI, RNI) yet.

@@ -15,6 +15,7 @@ from datetime import timedelta
 from typing import Any
 
 from .. import decoders as d
+from ..decoders import QUARTER_HOUR, whole_quarters
 from ..layout import Field as F
 from ..layout import Section, occurrences, triplet
 from ..registry import ParseContext, RecordParser, register
@@ -299,15 +300,6 @@ CONTINUATION_SCHEMA = {"continuation": "boolean"}
 
 # Identification columns copied into each EXCP row to make it usable on its own.
 EXCP_KEY_COLUMNS = ("smf30jbn", "smf30jnm", "smf30stm", "smf30stn", "smf30pgm", "continuation")
-
-
-QUARTER_HOUR = timedelta(minutes=15)  # every UTC offset is a whole number of quarter hours
-
-
-def whole_quarters(delta: timedelta) -> timedelta | None:
-    """`delta` rounded to quarter hours, if it is within a second of one."""
-    q = round(delta / QUARTER_HOUR) * QUARTER_HOUR
-    return q if abs(delta - q) < timedelta(seconds=1) else None
 
 
 def is_continuation(rec: bytes, subtype: int) -> bool:
